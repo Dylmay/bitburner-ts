@@ -4,12 +4,15 @@ import { KILL_CRAWLER_CALLABLE } from 'lib/scripts/models';
 
 const IGNORED_SCRIPT_PATHS = ['kill.ts'];
 
-export const main = typedMain(KILL_CRAWLER_CALLABLE, async ({ ns, log }) => {
-  const crawler = ServerCrawler.builder(ns, 'killer-crawler', log)
-    .ignoringServer('home')
-    .calling(KILL_CRAWLER_CALLABLE);
+export const main = typedMain(KILL_CRAWLER_CALLABLE, async ({ ns, log }, args) => {
+  const excludedServers = args?.excludedServers ?? ['home'];
 
-  await crawler.crawl(async ({ hostToVisit }) => {
+  const crawlerBuilder = ServerCrawler.builder(ns, 'killer-crawler', log);
+  for (const excludedServer of excludedServers) {
+    crawlerBuilder.ignoringServer(excludedServer);
+  }
+
+  await crawlerBuilder.calling(KILL_CRAWLER_CALLABLE, args).crawl(async ({ hostToVisit }) => {
     const processes = ns.ps(hostToVisit);
 
     for (const process of processes) {

@@ -11,6 +11,7 @@ import { spinCommand, SpinCommand } from 'bin/commands/spin/models';
 import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
 import * as files from 'lib/utils/files';
+import { Logger } from 'lib/utils/logging/logger';
 
 export type AvailableCommands =
   | AnalyticsCommand
@@ -46,8 +47,22 @@ export const COMMANDS: {
 };
 
 export async function main(ns: NS) {
-  const [commandArg, ...rest] = ns.args;
+  const log = Logger.getLogger(ns, 'orchestrator.ts');
+
+  const { host, remaining } = extractHost(ns.args);
+  const { portOutputPath, remaining: remainingArgs } = extractPortOutputPath(remaining);
+
+  const [commandArg, ...rest] = remainingArgs;
   const commandName = tryCast(commandArg, commandNameGuard);
+
+  log.info(
+    'parsed args',
+    ['commandName', commandName],
+    ['commandArgs', rest],
+    ['host', host],
+    ['portOutputPath', portOutputPath],
+  );
+
   if (!commandName || commandName === 'help') {
     printHelp(ns);
     return;
@@ -60,9 +75,7 @@ export async function main(ns: NS) {
     return;
   }
 
-  const { host, remaining } = extractHost(rest);
-  const { portOutputPath, remaining: serviceArgs } = extractPortOutputPath(remaining);
-  const args = command.parseArgs(serviceArgs);
+  const args = command.parseArgs(rest);
 
   if (host) {
     const execArgs: ExecArgs = {

@@ -11,5 +11,5 @@ export type ExecArgs = {
 };
 
 export const EXEC_CALLABLE: TypedCallableDefinition<ExecArgs> = {
-  scriptPath: 'bin/commands/exec/exec.ts',
+  scriptPath: 'lib/exec/exec.ts',
 };

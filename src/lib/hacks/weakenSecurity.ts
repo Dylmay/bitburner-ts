@@ -4,8 +4,8 @@ import { createNiceError } from 'lib/utils/errors';
 
 export const main = typedMain(
   WEAKEN_SECURITY_CALLABLE,
-  async ({ ns, log, localServerInfo }, args) => {
-    if (!localServerInfo) {
+  async ({ ns, log, localServerInfo, outputPort }, args) => {
+    if (!localServerInfo || !outputPort) {
       throw createNiceError('No server info provided');
     }
 

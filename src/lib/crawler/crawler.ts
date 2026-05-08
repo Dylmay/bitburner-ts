@@ -98,6 +98,7 @@ export class ServerCrawler<TDef extends AnyCallableDefinition> {
         const visit = () => visitor({ currentHost: hostname, hostToVisit: server });
 
         const exec = async () => {
+          this.log.info('Attempting to exec');
           const pid = await execCallableAndWait({
             ns: this.ns,
             hostname: server,
@@ -120,7 +121,9 @@ export class ServerCrawler<TDef extends AnyCallableDefinition> {
         };
 
         const [first, second] = this.depthFirst ? [exec, visit] : [visit, exec];
+        this.log.debug('Visiting first');
         await first();
+        this.log.debug('Visiting second');
         await second();
       } catch (exc) {
         this.log.error(

@@ -1,21 +1,14 @@
-import { AnyCallableDefinition, typedMain } from 'lib/callables/typedCallable';
+import { typedMain } from 'lib/callables/typedCallable';
 import { SWARM_COMMAND_CALLABLE } from 'bin/commands/swarm/models';
-import {
-  KILL_CRAWLER_CALLABLE,
-  INFIL_CRAWLER_CALLABLE,
-  SCAN_CALLABLE,
-  ActionType,
-  ACTION_TYPE_TO_CALLABLE,
-} from 'lib/scripts/models';
-import { execCallable, ExecCallableArgs } from 'lib/callables/exec';
-import {
-  HackArgs,
-} from 'lib/hacks/models';
+import { ActionType, ACTION_TYPE_TO_CALLABLE } from 'lib/scripts/models';
+import { execCallable } from 'lib/callables/exec';
+import { HACK_OUTPUT_PORT, HackArgs } from 'lib/hacks/models';
 import * as files from 'lib/utils/files';
 import { NETWORK_REPORT_PATH, networkReportGuard, NetworkReport } from 'lib/reports/models';
 import { ServerInfo } from 'lib/servers/models';
 import { createNiceError } from 'lib/utils/errors';
-import { execCallableAndWait } from 'lib/callables/execAndWait';
+import { FILES_LOCK, installDataGuard } from 'lib/installs/models';
+import { PortHandle } from 'lib/utils/ports';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
@@ -26,28 +19,46 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
     throw createNiceError('No local server info. Unable to start swarm');
   }
 
+  const hackListenerPort = PortHandle.connectToPort(ns, HACK_OUTPUT_PORT);
+  hackListenerPort.clearPort();
+
   const { hostname: localhost } = localServerInfo;
+  const scriptToRamCost = new Map(
+    Object.entries(files.loadJson(ns, FILES_LOCK, installDataGuard).filenameToInfo)
+      .filter(([_, fileInfo]) => fileInfo != null)
+      .map(([filename, { ramUsage }]) => [filename, ramUsage]),
+  );
 
-  const fullSpin = async (): Promise<NetworkReport> => {
-    await throwOrWait({ ns, hostname: localhost, callableDefinition: KILL_CRAWLER_CALLABLE });
-    await throwOrWait({ ns, hostname: localhost, callableDefinition: INFIL_CRAWLER_CALLABLE });
-    await throwOrWait({ ns, hostname: localhost, callableDefinition: SCAN_CALLABLE });
-    return files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
-  };
-
-  const deployAction = (action: ActionType, targetHost: string, report: NetworkReport) => {
+  const deployAction = (
+    action: ActionType,
+    targetHost: string,
+    report: NetworkReport,
+  ): number[] => {
     const callable = ACTION_TYPE_TO_CALLABLE[action];
 
-    const scriptRam = ns.getScriptRam(callable.scriptPath);
+    const scriptRam = scriptToRamCost.get(callable.scriptPath);
+
+    if (scriptRam === undefined) {
+      throw createNiceError('Unable to fetch ram cost', ['scriptRam', scriptRam]);
+    }
+
     const args: HackArgs = { target: targetHost };
 
     log.info('Deploying action', ['action', action], ['target', targetHost]);
 
+    const pids = [];
     for (const [hostname, serverInfo] of Object.entries(report.serverToServerInfo)) {
-      if (hostname === 'home') continue;
+      log.info('Checking host', ['hostname', hostname], ['serverInfo', serverInfo]);
+      if (hostname === 'home' || hostname === localhost) {
+        continue;
+      }
       const threads = Math.floor(serverInfo.ram / scriptRam);
-      if (threads <= 0) continue;
-      execCallable({
+
+      if (threads <= 0) {
+        continue;
+      }
+
+      const pid = execCallable({
         ns,
         hostname,
         callableDefinition: callable,
@@ -55,20 +66,28 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
         args,
         log,
       });
+
+      if (pid !== undefined) {
+        pids.push(pid);
+      } else {
+        log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
+      }
     }
+
+    return pids;
   };
 
   let lastSpinLevel = ns.getPlayer().skills.hacking;
 
   log.info('Starting swarm');
-  let report = await fullSpin();
-  let targetInfo = selectBestTarget(ns, report);
-  let currentAction = computeAction(ns, targetInfo);
-  deployAction(currentAction, targetInfo.hostname, report);
+  const runningReport = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
+  let targetInfo = selectBestTarget(ns, runningReport);
+  let currentAction = computeAction(targetInfo);
+  let processPids = deployAction(currentAction, targetInfo.hostname, runningReport);
 
   while (true) {
     const { hacking } = ns.getPlayer().skills;
-    const newAction = computeAction(ns, targetInfo);
+    const newAction = computeAction(targetInfo);
 
     if (newAction !== currentAction || hacking - lastSpinLevel >= 50) {
       log.info(
@@ -77,10 +96,40 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
         ['lastSpinLevel', lastSpinLevel],
       );
       lastSpinLevel = hacking;
-      report = await fullSpin();
-      targetInfo = selectBestTarget(ns, report);
-      currentAction = computeAction(ns, targetInfo);
-      deployAction(currentAction, targetInfo.hostname, report);
+      // report = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
+      targetInfo = selectBestTarget(ns, runningReport);
+      currentAction = computeAction(targetInfo);
+
+      for (const pid of processPids) {
+        ns.kill(pid);
+      }
+
+      processPids = deployAction(currentAction, targetInfo.hostname, runningReport);
+    }
+
+    while (hackListenerPort.hasData()) {
+      const data = hackListenerPort.read();
+      if (data !== undefined) {
+        log.debug('Hacker has completed cycle', ['cycle', data]);
+        switch (data.type) {
+          case 'grow':
+            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
+              data.growAmount;
+            break;
+          case 'weaken':
+            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
+              data.weakenAmount;
+            break;
+          case 'hack':
+            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
+              data.hackAmount;
+            break;
+          default: {
+            const neverData: never = data;
+            throw createNiceError('Unknown data type', ['data', neverData]);
+          }
+        }
+      }
     }
 
     log.debug('Sleeping for 10 seconds');
@@ -109,7 +158,7 @@ const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
   return best;
 };
 
-const computeAction = (ns: NS, info: ServerInfo): ActionType => {
+const computeAction = (info: ServerInfo): ActionType => {
   const { securityLevel, moneyAvailable } = info.unstable;
   if (info.minSecurityLevel / securityLevel < MIN_SECURITY_PERCENTAGE) {
     return 'weaken';
@@ -120,14 +169,4 @@ const computeAction = (ns: NS, info: ServerInfo): ActionType => {
   }
 
   return 'hack';
-};
-
-const throwOrWait = async (callableArgs: ExecCallableArgs<AnyCallableDefinition>) => {
-  const pid = await execCallableAndWait(callableArgs);
-  if (!pid) {
-    throw createNiceError('Unable to start callable', [
-      'definition',
-      callableArgs.callableDefinition,
-    ]);
-  }
 };

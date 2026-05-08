@@ -11,7 +11,7 @@ export type ExecCallableArgs<TDef extends AnyCallableDefinition> = {
   args?: ArgOf<TDef> | undefined;
   crawlerArgs?: InternalServerCrawlerArgs;
   callableOptions?: CallableOptions;
-  log?: Logger,
+  log?: Logger;
 };
 
 export const execCallable = <TDef extends AnyCallableDefinition>({
@@ -28,10 +28,17 @@ export const execCallable = <TDef extends AnyCallableDefinition>({
     callableDefinition.scriptPath,
     hostname,
     runOptions ?? {},
-    ...(args !== undefined || crawlerArgs !== undefined || callableOptions !== undefined ? [toJsonArgs(args, crawlerArgs, callableOptions)] : []),
+    ...(args !== undefined || crawlerArgs !== undefined || callableOptions !== undefined
+      ? [toJsonArgs(args, crawlerArgs, callableOptions)]
+      : []),
   );
 
-  log?.trace("Executing callable", ["targetHost", hostname], ["callable", callableDefinition], ["launchedPid", launchedPid]);
+  log?.trace(
+    'Executing callable',
+    ['targetHost', hostname],
+    ['callable', callableDefinition],
+    ['launchedPid', launchedPid],
+  );
 
   return launchedPid === 0 ? undefined : launchedPid;
 };

@@ -14,6 +14,7 @@ export const main = typedMain(INSTALL_CRAWLER_CALLABLE, async ({ ns, log, output
 
   await crawler.crawl(async ({ currentHost, hostToVisit }) => {
     // TODO(dmayor): Make it so that it's actually possible to run this on home or work on generic donor server logic
+    log.debug('Installing lib', ['hostToVisit', hostToVisit]);
     installLib(ns, hostToVisit, log);
 
     for (const step of BUILD_SERVER_INFO_STEPS) {

@@ -49,7 +49,11 @@ export const INSTALL_CRAWLER_CALLABLE: TypedCallableDefinition<void, InstallCraw
     },
   };
 
-export const KILL_CRAWLER_CALLABLE: TypedCallableDefinition<void> = {
+export type KillCrawlerArgs = {
+  excludedServers: string[];
+};
+
+export const KILL_CRAWLER_CALLABLE: TypedCallableDefinition<KillCrawlerArgs | undefined> = {
   scriptPath: 'lib/scripts/kill.ts',
 };
 

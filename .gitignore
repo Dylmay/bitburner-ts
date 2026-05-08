@@ -5,3 +5,4 @@ NetscriptDefinitions.d.ts
 backups/
 .claude/
 *.d.ts
+*lock.txt

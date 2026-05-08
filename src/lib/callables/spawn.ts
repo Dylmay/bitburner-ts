@@ -24,7 +24,7 @@ export const spawnCallable = <TDef extends AnyCallableDefinition>({
 
   ns.spawn(
     callableDefinition.scriptPath,
-    runOptions ?? { spawnDelay: 100 },
+    runOptions ?? { spawnDelay: 0 },
     ...(args !== undefined || crawlerArgs !== undefined || callableOptions !== undefined
       ? [toJsonArgs(args, crawlerArgs, callableOptions)]
       : []),

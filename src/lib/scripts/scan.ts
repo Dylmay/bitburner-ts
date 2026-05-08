@@ -83,4 +83,9 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
   };
 
   files.writeJson(ns, NETWORK_REPORT_PATH, networkReport);
+
+  log.info('Exporting network report to all nodes');
+  for (const server of networkReport.allServers) {
+    ns.scp(NETWORK_REPORT_PATH, server);
+  }
 });
