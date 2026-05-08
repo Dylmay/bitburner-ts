@@ -1,0 +1,24 @@
+{
+  "name": "bitburner-ts-template",
+  "version": "1.0.0",
+  "scripts": {
+    "tsc": "tsc",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"@types/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"@types/**/*.ts\"",
+    "extract-globals": "node @types/extract-globals.mjs",
+    "sync": "bitburner-filesync"
+  },
+  "packageManager": "pnpm@10.19.0",
+  "author": "dmayor",
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.2",
+    "bitburner-filesync": "^1.2.0-beta4",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    // Synced by bitburner-filesync
+    "rootDir": "./src/",
+    // We'll let Bitburner handle transpilation, which also enables some edits in the game itself
+    "noEmit": true,
+
+    // Environment Settings
+    // See also https://aka.ms/tsconfig/module
+    "module": "esnext",
+    "target": "esnext",
+
+    // Bitburner does not like root imports (e.g. /lib/something but lib/something works)
+    "paths": {
+      "*": ["./src/*"]
+      // if you want to limit the scopes in which this works, you can do this only for those, e.g.
+      // "lib/*": [ "./src/lib/*" ],
+    },
+
+    // Optional, but Bitburner can handle it
+    // It can save trouble since Bitburner imports name.js instead of name.ts if both are present
+    "allowImportingTsExtensions": true,
+
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Recommended TypeScript Options
+    "strict": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+
+  // ensure the source files and definitions are included in the context
+  "include": ["src/**/*", "./@types/global.d.ts"]
+}
