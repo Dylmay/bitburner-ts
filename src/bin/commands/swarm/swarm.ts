@@ -113,14 +113,32 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
         log.debug('Hacker has completed cycle', ['cycle', data]);
         switch (data.type) {
           case 'grow':
+            log.info(
+              'Completed grow on node',
+              ['target', targetInfo.hostname],
+              ['host', data.hostname],
+              ['weakenAmount', data.growAmount],
+            );
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
               data.growAmount;
             break;
           case 'weaken':
+            log.info(
+              'Completed weaken on node',
+              ['target', targetInfo.hostname],
+              ['host', data.hostname],
+              ['weakenAmount', data.weakenAmount],
+            );
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
               data.weakenAmount;
             break;
           case 'hack':
+            log.info(
+              'Completed hack on node',
+              ['target', targetInfo.hostname],
+              ['host', data.hostname],
+              ['hackAmount', data.hackAmount],
+            );
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
               data.hackAmount;
             break;
@@ -132,7 +150,7 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
       }
     }
 
-    log.debug('Sleeping for 10 seconds');
+    log.trace('Sleeping for 10 seconds');
     await ns.sleep(10_000);
   }
 });

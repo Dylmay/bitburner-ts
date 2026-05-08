@@ -69,7 +69,7 @@ export const typedMain =
 
     const log = Logger.getLogger(ns, definition.scriptPath)
       .disablingDefaultNsLogging()
-      .withMinimumLogLevel(LogLevel.TRACE);
+      .withMinimumLogLevel(LogLevel.DEBUG);
 
     if (callableOptions !== undefined) {
       if (callableOptions.logLevel !== undefined) {
