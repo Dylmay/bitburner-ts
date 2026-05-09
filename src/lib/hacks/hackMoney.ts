@@ -18,7 +18,7 @@ export const main = typedMain(
 
       outputPort.write({ type: 'hack', hackAmount, hostname: localhost });
 
-      log.debug('Hacked target', ['target', target], ['hackAmount', hackAmount]);
+      log.info('Hacked target', ['target', target], ['hackAmount', hackAmount]);
     }
   },
 );

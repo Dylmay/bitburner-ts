@@ -2,6 +2,7 @@ import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { typeIs } from 'lib/utils/typeGuard';
 import { createNiceError } from 'lib/utils/errors';
 import { CommandFor } from 'bin/commands/models';
+import { pathOf } from 'lib/utils/paths';
 
 export type CollectAnalyticsArgs = {
   target: string;
@@ -9,7 +10,7 @@ export type CollectAnalyticsArgs = {
 };
 
 export const COLLECT_ANALYTICS_CALLABLE: TypedCallableDefinition<CollectAnalyticsArgs> = {
-  scriptPath: 'bin/commands/analytics/analytics.ts',
+  scriptPath: pathOf('bin/commands/analytics/analytics.ts'),
 };
 
 export type AnalyticsCommand = {

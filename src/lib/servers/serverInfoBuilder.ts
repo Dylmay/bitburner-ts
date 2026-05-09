@@ -1,6 +1,7 @@
+import { pathOf } from 'lib/utils/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
-export const SERVER_INFO_BUILDER_PATH = 'info/builder.server.json.txt';
+export const SERVER_INFO_BUILDER_PATH = pathOf('info/builder.server.json');
 
 export type ServerInfoBuilderHostname = {
   hostname: string;

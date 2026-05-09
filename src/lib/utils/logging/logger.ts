@@ -1,6 +1,29 @@
+import { Path } from 'lib/utils/paths';
+import { guard, typeIs } from 'lib/utils/typeGuard';
+
 export type LogArg = [string, unknown];
 
-export type LogConsumer = (message: string) => void;
+export type LogConsumer = (logMessage: StructuredLogMessage) => void;
+
+export type StructuredLogMessage = {
+  message: string;
+  args: LogArg[];
+  context: LogArg[];
+  scriptName: string;
+  logLevel: LogLevel;
+};
+
+export const structuredLogMessageGuard = guard(
+  (arg: unknown): arg is StructuredLogMessage =>
+    typeIs(arg, Object) &&
+    'message' in arg &&
+    typeIs(arg.message, 'string') &&
+    'args' in arg &&
+    'context' in arg &&
+    'scriptName' in arg &&
+    typeIs(arg.scriptName, 'string') &&
+    'logLevel' in arg,
+);
 
 export enum LogLevel {
   TRACE = 0,
@@ -18,7 +41,7 @@ enum LogLevelString {
   ERROR = 'ERROR',
 }
 
-const logLevelToLogLevelString = (logLevel: LogLevel): LogLevelString => {
+export const logLevelToLogLevelString = (logLevel: LogLevel): LogLevelString => {
   switch (logLevel) {
     case LogLevel.TRACE:
       return LogLevelString.TRACE;
@@ -36,6 +59,18 @@ const logLevelToLogLevelString = (logLevel: LogLevel): LogLevelString => {
       return LogLevelString.ERROR;
   }
 };
+const createDefaultLogConsumer =
+  (ns: NS) =>
+  ({ logLevel, args, message, context, scriptName }: StructuredLogMessage) => {
+    args.unshift(['scriptName', scriptName]);
+
+    const argsToPrint = [...context, ...args]
+      .map(([argName, argValue]) => ' |-{' + argName + ': ' + JSON.stringify(argValue) + '}')
+      .reduce((a, b) => a + '\n' + b, '');
+
+    const stringifiedMessage = logLevelToLogLevelString(logLevel) + ': ' + message + argsToPrint;
+    ns.print(stringifiedMessage);
+  };
 
 export class Logger {
   private constructor(
@@ -46,9 +81,8 @@ export class Logger {
     private ns: NS,
   ) {}
 
-  static getLogger(ns: NS, filename: string) {
-    const defaultLogConsumer = (message: string) => ns.print(message);
-    return new Logger(filename, [defaultLogConsumer], [], LogLevel.INFO, ns);
+  static getLogger(ns: NS, filePath: Path) {
+    return new Logger(filePath.path, [createDefaultLogConsumer(ns)], [], LogLevel.INFO, ns);
   }
 
   public withConsumer(logConsumer: LogConsumer): Logger {
@@ -72,37 +106,38 @@ export class Logger {
   }
 
   public trace(message: string, ...logArgs: LogArg[]) {
-    this.printAndFormatMessage(LogLevel.TRACE, message, logArgs);
+    this.consumeMessage(LogLevel.TRACE, message, logArgs);
   }
 
   public debug(message: string, ...logArgs: LogArg[]) {
-    this.printAndFormatMessage(LogLevel.DEBUG, message, logArgs);
+    this.consumeMessage(LogLevel.DEBUG, message, logArgs);
   }
 
   public info(message: string, ...logArgs: LogArg[]) {
-    this.printAndFormatMessage(LogLevel.INFO, message, logArgs);
+    this.consumeMessage(LogLevel.INFO, message, logArgs);
   }
 
   public warn(message: string, ...logArgs: LogArg[]) {
-    this.printAndFormatMessage(LogLevel.WARN, message, logArgs);
+    this.consumeMessage(LogLevel.WARN, message, logArgs);
   }
 
   public error(message: string, ...logArgs: LogArg[]) {
-    this.printAndFormatMessage(LogLevel.ERROR, message, logArgs);
+    this.consumeMessage(LogLevel.ERROR, message, logArgs);
   }
 
-  private printAndFormatMessage(level: LogLevel, message: string, args: LogArg[]) {
-    if (level < this.minimumLogLevel) {
+  private consumeMessage(logLevel: LogLevel, message: string, args: LogArg[]) {
+    if (logLevel < this.minimumLogLevel) {
       return;
     }
 
-    args.unshift(['scriptName', this.scriptName]);
+    const structuredLogMessage: StructuredLogMessage = {
+      logLevel,
+      message,
+      args,
+      context: this.loggingContext,
+      scriptName: this.scriptName,
+    };
 
-    const argsToPrint = [...this.loggingContext, ...args]
-      .map(([argName, argValue]) => ' |-{' + argName + ': ' + JSON.stringify(argValue) + '}')
-      .reduce((a, b) => a + '\n' + b, '');
-
-    const stringifiedMessage = logLevelToLogLevelString(level) + ': ' + message + argsToPrint;
-    this.logConsumers.forEach((consumer) => consumer(stringifiedMessage));
+    this.logConsumers.forEach((consumer) => consumer(structuredLogMessage));
   }
 }

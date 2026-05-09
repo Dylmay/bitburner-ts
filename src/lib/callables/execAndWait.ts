@@ -10,14 +10,12 @@ type ExecWaitArgs = {
 export const execCallableAndWait = async <TDef extends AnyCallableDefinition>({
   ns,
   sleepAmountMs,
-  log,
   ...rest
 }: ExecCallableArgs<TDef> & ExecWaitArgs): Promise<boolean> => {
   const pid = execCallable({ ns, ...rest });
 
   if (pid) {
     while (ns.isRunning(pid)) {
-      log?.trace('Waiting for process to finish', ['pid', pid]);
       await ns.sleep(sleepAmountMs ?? DEFAULT_SLEEP_AMOUNT_MS);
     }
   }

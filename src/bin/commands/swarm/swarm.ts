@@ -3,125 +3,170 @@ import { SWARM_COMMAND_CALLABLE } from 'bin/commands/swarm/models';
 import { ActionType, ACTION_TYPE_TO_CALLABLE } from 'lib/scripts/models';
 import { execCallable } from 'lib/callables/exec';
 import { HACK_OUTPUT_PORT, HackArgs } from 'lib/hacks/models';
-import * as files from 'lib/utils/files';
-import { NETWORK_REPORT_PATH, networkReportGuard, NetworkReport } from 'lib/reports/models';
+import { NetworkReport, NETWORK_REPORT_STORE } from 'lib/reports/models';
 import { ServerInfo } from 'lib/servers/models';
 import { createNiceError } from 'lib/utils/errors';
-import { FILES_LOCK, installDataGuard } from 'lib/installs/models';
 import { PortHandle } from 'lib/utils/ports';
+import { Store } from 'lib/stores/store';
+import { INSTALL_DATA_STORE } from 'lib/installs/models';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
 
-export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localServerInfo }) => {
-  // Returns a fresh NetworkReport loaded after sync completes — callers never touch a stale report.
-  if (!localServerInfo) {
-    throw createNiceError('No local server info. Unable to start swarm');
-  }
-
-  const hackListenerPort = PortHandle.connectToPort(ns, HACK_OUTPUT_PORT);
-  hackListenerPort.clearPort();
-
-  const { hostname: localhost } = localServerInfo;
-  const scriptToRamCost = new Map(
-    Object.entries(files.loadJson(ns, FILES_LOCK, installDataGuard).filenameToInfo)
-      .filter(([_, fileInfo]) => fileInfo != null)
-      .map(([filename, { ramUsage }]) => [filename, ramUsage]),
-  );
-
-  const deployAction = (
-    action: ActionType,
-    targetHost: string,
-    report: NetworkReport,
-  ): number[] => {
-    const callable = ACTION_TYPE_TO_CALLABLE[action];
-
-    const scriptRam = scriptToRamCost.get(callable.scriptPath);
-
-    if (scriptRam === undefined) {
-      throw createNiceError('Unable to fetch ram cost', ['scriptRam', scriptRam]);
+export const main = typedMain(
+  SWARM_COMMAND_CALLABLE,
+  async ({ ns, log, localServerInfo }, args) => {
+    // Returns a fresh NetworkReport loaded after sync completes — callers never touch a stale report.
+    if (!localServerInfo) {
+      throw createNiceError('No local server info. Unable to start swarm');
     }
+    // next goals:
+    // 1. figure out the total amount of ram we have available on the network
+    // 2. figure out how many threads exactly keeps us in a stable state as close to 100% as possible
+    // 3. focus on the max feasible node first, remove threads from nodes that are no longer generating the same level of income
+    // 4. have a min $ per second for threads
+    // 5. Use max threads to grow and weaken nodes to reach 100%, before leaving a skeleton crew
 
-    const args: HackArgs = { target: targetHost };
+    const hackListenerPort = PortHandle.connectToPort(ns, HACK_OUTPUT_PORT);
+    hackListenerPort.clearPort();
 
-    log.info('Deploying action', ['action', action], ['target', targetHost]);
+    const installDataStore = Store.openStore(ns, INSTALL_DATA_STORE);
+    const networkReportStore = Store.openStore(ns, NETWORK_REPORT_STORE);
 
-    const pids = [];
-    for (const [hostname, serverInfo] of Object.entries(report.serverToServerInfo)) {
-      log.info('Checking host', ['hostname', hostname], ['serverInfo', serverInfo]);
-      if (hostname === 'home' || hostname === localhost) {
-        continue;
-      }
-      const threads = Math.floor(serverInfo.ram / scriptRam);
+    const { hostname: localhost } = localServerInfo;
+    const scriptToRamCost = new Map(
+      Object.entries(installDataStore.load().filenameToInfo).map<[string, number | undefined]>(
+        ([filename, { ramUsage }]) => [filename, ramUsage],
+      ),
+    );
 
-      if (threads <= 0) {
-        continue;
-      }
+    const deployAction = (
+      action: ActionType,
+      targetHost: string,
+      report: NetworkReport,
+    ): {
+      hostToProcess: Record<string, { pid: number; threads: number }>;
+      gigsSpent: number;
+      threadsSpent: number;
+    } => {
+      const callable = ACTION_TYPE_TO_CALLABLE[action];
 
-      const pid = execCallable({
-        ns,
-        hostname,
-        callableDefinition: callable,
-        runOptions: { threads },
-        args,
-        log,
-      });
+      // TODO(dmayor): Make the store allow kv pairs
+      const scriptRam = scriptToRamCost.get(callable.scriptPath.path);
 
-      if (pid !== undefined) {
-        pids.push(pid);
-      } else {
-        log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
-      }
-    }
-
-    return pids;
-  };
-
-  let lastSpinLevel = ns.getPlayer().skills.hacking;
-
-  log.info('Starting swarm');
-  const runningReport = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
-  let targetInfo = selectBestTarget(ns, runningReport);
-  let currentAction = computeAction(targetInfo);
-  let processPids = deployAction(currentAction, targetInfo.hostname, runningReport);
-
-  while (true) {
-    const { hacking } = ns.getPlayer().skills;
-    const newAction = computeAction(targetInfo);
-
-    if (newAction !== currentAction || hacking - lastSpinLevel >= 50) {
-      log.info(
-        'Re-spinning after hacking level gain',
-        ['hackingLevel', hacking],
-        ['lastSpinLevel', lastSpinLevel],
-      );
-      lastSpinLevel = hacking;
-      // report = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
-      targetInfo = selectBestTarget(ns, runningReport);
-      currentAction = computeAction(targetInfo);
-
-      for (const pid of processPids) {
-        ns.kill(pid);
+      if (scriptRam === undefined) {
+        throw createNiceError('Unable to fetch ram cost', ['scriptPath', callable.scriptPath]);
       }
 
-      processPids = deployAction(currentAction, targetInfo.hostname, runningReport);
-    }
+      const args: HackArgs = { target: targetHost };
 
-    while (hackListenerPort.hasData()) {
-      const data = hackListenerPort.read();
-      if (data !== undefined) {
+      log.info('Deploying action', ['action', action], ['target', targetHost]);
+
+      const hostToProcess: Record<string, { pid: number; threads: number }> = {};
+      let gigsSpent = 0;
+      let threadsSpent = 0;
+      for (const [hostname, serverInfo] of Object.entries(report.serverToServerInfo)) {
+        log.trace('Checking host', ['hostname', hostname], ['serverInfo', serverInfo]);
+        if (hostname === 'home' || hostname === localhost) {
+          continue;
+        }
+        const threads = Math.floor(serverInfo.ram / scriptRam);
+
+        threadsSpent += threads;
+        gigsSpent += scriptRam * threads;
+
+        if (threads <= 0) {
+          continue;
+        }
+
+        const pid = execCallable({
+          ns,
+          hostname,
+          callableDefinition: callable,
+          runOptions: { threads },
+          args,
+        });
+
+        if (pid !== undefined) {
+          hostToProcess[hostname] = {
+            pid,
+            threads,
+          };
+        } else {
+          log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
+        }
+      }
+
+      return {
+        hostToProcess,
+        threadsSpent,
+        gigsSpent,
+      };
+    };
+
+    let lastSpinLevel = ns.getPlayer().skills.hacking;
+
+    log.info('Starting swarm');
+    const runningReport = networkReportStore.load();
+    let targetInfo = args?.target
+      ? runningReport.serverToServerInfo[args.target]!
+      : selectBestTarget(ns, runningReport);
+    let currentAction = computeAction(targetInfo);
+    let deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport);
+
+    while (true) {
+      const { hacking } = ns.getPlayer().skills;
+      const newAction = computeAction(targetInfo);
+
+      if (newAction !== currentAction || hacking - lastSpinLevel >= 50) {
+        log.info(
+          'Re-spinning after hacking level gain',
+          ['hackingLevel', hacking],
+          ['lastSpinLevel', lastSpinLevel],
+        );
+        lastSpinLevel = hacking;
+        // report = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
+        targetInfo = args?.target
+          ? runningReport.serverToServerInfo[args.target]!
+          : selectBestTarget(ns, runningReport);
+        currentAction = computeAction(targetInfo);
+
+        for (const pid of Object.values(deployInfo.hostToProcess).map(({ pid }) => pid)) {
+          ns.kill(pid);
+        }
+
+        deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport);
+      }
+
+      while (hackListenerPort.hasData()) {
+        const data = hackListenerPort.read();
+
+        if (data === undefined) {
+          log.warn('Unable to read data on hack listener port');
+          break;
+        }
+
         log.debug('Hacker has completed cycle', ['cycle', data]);
         switch (data.type) {
-          case 'grow':
+          case 'grow': {
             log.info(
               'Completed grow on node',
               ['target', targetInfo.hostname],
               ['host', data.hostname],
-              ['weakenAmount', data.growAmount],
+              ['growAmount', data.growAmount],
             );
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
               data.growAmount;
+
+            const securityGrow = ns.growthAnalyzeSecurity(
+              deployInfo.hostToProcess[data.hostname]!.threads,
+              targetInfo.hostname,
+            );
+
+            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+              securityGrow;
             break;
+          }
           case 'weaken':
             log.info(
               'Completed weaken on node',
@@ -132,7 +177,7 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
               data.weakenAmount;
             break;
-          case 'hack':
+          case 'hack': {
             log.info(
               'Completed hack on node',
               ['target', targetInfo.hostname],
@@ -141,34 +186,55 @@ export const main = typedMain(SWARM_COMMAND_CALLABLE, async ({ ns, log, localSer
             );
             runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
               data.hackAmount;
+
+            const securityHackGrow = ns.hackAnalyzeSecurity(
+              deployInfo.hostToProcess[data.hostname]!.threads,
+              targetInfo.hostname,
+            );
+
+            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+              securityHackGrow;
             break;
+          }
           default: {
             const neverData: never = data;
             throw createNiceError('Unknown data type', ['data', neverData]);
           }
         }
-      }
-    }
+        networkReportStore.write(runningReport);
 
-    log.trace('Sleeping for 10 seconds');
-    await ns.sleep(10_000);
-  }
-});
+        await ns.sleep(100);
+      }
+
+      log.trace('Sleeping for 10 seconds');
+      await ns.sleep(10_000);
+    }
+  },
+);
 
 const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
   const playerLevel = ns.getPlayer().skills.hacking;
-  let best: ServerInfo | undefined;
 
-  for (const info of Object.values(report.serverToServerInfo)) {
-    if (
-      info.requiredHackingLevel <= playerLevel &&
-      info.maxMoney > 0 &&
-      (best === undefined || info.maxMoney > best.maxMoney)
-    ) {
-      best = info;
-    }
-  }
+  const getMaxMoneyPerTick = ({
+    minSecurityLevel,
+    baseSecurityLevel,
+    hostname,
+    maxMoney,
+  }: ServerInfo): number => {
+    const hackTime = ns.getHackTime(hostname);
+    const hackTimeAtMinSecurity = (hackTime / baseSecurityLevel) * minSecurityLevel;
 
+    return maxMoney / hackTimeAtMinSecurity;
+  };
+
+  const sortedBestTargets = Object.values(report.serverToServerInfo)
+    .filter(
+      ({ maxMoney, requiredHackingLevel }) => maxMoney > 0 && requiredHackingLevel <= playerLevel,
+    )
+    .sort((a, b) => getMaxMoneyPerTick(a) - getMaxMoneyPerTick(b));
+  // get best potential hacking times
+
+  const best = sortedBestTargets.at(0);
   if (!best) {
     throw createNiceError('swarm: no hackable server found in network report');
   }

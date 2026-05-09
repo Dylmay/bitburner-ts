@@ -32,7 +32,7 @@ const hackCrawler: CallableFor<typeof HACK_CRAWLER_CALLABLE> = async ({ ns, log 
 
   await crawler.crawl(async ({ hostToVisit }) => {
     const ram = ns.getServerMaxRam(hostToVisit);
-    const ramToBeUsed = ns.getScriptRam(callableDefinition.scriptPath);
+    const ramToBeUsed = ns.getScriptRam(callableDefinition.scriptPath.path);
     const numThreads = Math.floor(ram / ramToBeUsed);
 
     log.info(

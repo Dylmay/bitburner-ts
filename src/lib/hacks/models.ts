@@ -1,4 +1,5 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
+import { pathOf } from 'lib/utils/paths';
 import { Port } from 'lib/utils/ports';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
@@ -47,21 +48,21 @@ export const HACK_OUTPUT_PORT: Port<HackOutput> = {
 };
 
 export const HACK_MONEY_CALLABLE: TypedCallableDefinition<HackArgs, HackOutput> = {
-  scriptPath: '/lib/hacks/hackMoney.ts',
+  scriptPath: pathOf('lib/hacks/hackMoney.ts'),
   outputPort: HACK_OUTPUT_PORT,
 };
 
 export const GROW_MONEY_CALLABLE: TypedCallableDefinition<HackArgs, HackOutput> = {
-  scriptPath: 'lib/hacks/growMoney.ts',
+  scriptPath: pathOf('lib/hacks/growMoney.ts'),
   outputPort: HACK_OUTPUT_PORT,
 };
 
 export const WEAKEN_SECURITY_CALLABLE: TypedCallableDefinition<HackArgs, HackOutput> = {
-  scriptPath: 'lib/hacks/weakenSecurity.ts',
+  scriptPath: pathOf('lib/hacks/weakenSecurity.ts'),
   outputPort: HACK_OUTPUT_PORT,
 };
 
 export const HACK_ALL_CALLABLE: TypedCallableDefinition<HackAllArgs, HackOutput> = {
-  scriptPath: 'lib/hacks/hackAll.ts',
+  scriptPath: pathOf('lib/hacks/hackAll.ts'),
   outputPort: HACK_OUTPUT_PORT,
 };

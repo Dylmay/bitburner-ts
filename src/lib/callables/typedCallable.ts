@@ -1,15 +1,16 @@
 import { parseJsonArgs, parseJsonArgsCallableOptions } from 'lib/args/jsonArgs';
-import { SERVER_INFO_PATH, ServerInfo, serverInfoGuard } from 'lib/servers/models';
+import { SERVER_INFO_STORE, ServerInfo } from 'lib/servers/models';
 import { createPortLoggingConsumer } from 'lib/utils/logging/consumers/portLoggingConsumer';
 import { Logger, LogLevel } from 'lib/utils/logging/logger';
 import { LoggingPort } from 'lib/utils/logging/portLogger';
 import { Port, PortHandle } from 'lib/utils/ports';
-import * as files from 'lib/utils/files';
+import { Store } from 'lib/stores/store';
+import { Path } from 'lib/utils/paths';
 
-export type AnyCallableDefinition = { readonly scriptPath: string };
+export type AnyCallableDefinition = { readonly scriptPath: Path };
 
 export type TypedCallableDefinition<TArg, TPortOutput = never> = AnyCallableDefinition & {
-  readonly scriptPath: string;
+  readonly scriptPath: Path;
   readonly __phantom?: TArg;
   readonly outputPort?: Port<TPortOutput>;
 };
@@ -65,11 +66,11 @@ export const typedMain =
   async (ns: NS) => {
     const callableOptions = parseJsonArgsCallableOptions(ns);
 
-    const localServerInfo = files.tryLoadJson(ns, SERVER_INFO_PATH, serverInfoGuard);
+    const localServerInfo = Store.openStore(ns, SERVER_INFO_STORE).tryLoad();
 
     const log = Logger.getLogger(ns, definition.scriptPath)
       .disablingDefaultNsLogging()
-      .withMinimumLogLevel(LogLevel.DEBUG);
+      .withMinimumLogLevel(LogLevel.INFO);
 
     if (callableOptions !== undefined) {
       if (callableOptions.logLevel !== undefined) {
@@ -86,13 +87,16 @@ export const typedMain =
 
     log.trace('Fetched callable options', ['callableOptions', callableOptions]);
 
-    const ctx: ScriptContext<TPortOutput> = definition.outputPort
-      ? {
-          ns,
-          log,
-          localServerInfo,
-          outputPort: PortHandle.connectToPort(ns, definition.outputPort, log),
-        }
-      : { ns, log, localServerInfo };
+    const ctx: ScriptContext<TPortOutput> = {
+      ns,
+      log,
+      localServerInfo,
+      ...(definition.outputPort
+        ? { outputPort: PortHandle.connectToPort(ns, definition.outputPort, log) }
+        : {}),
+    };
+
+    // It's generally fine to cast here. The expectation is any typed main callable is called through the equivalent
+    // {exec|run|spawn}Callable which will do it's own type checking
     await main(ctx, parseJsonArgs(ns) as T | undefined);
   };

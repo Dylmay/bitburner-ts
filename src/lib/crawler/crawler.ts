@@ -1,6 +1,5 @@
-import * as files from 'lib/utils/files';
 import { Logger } from 'lib/utils/logging/logger';
-import { SERVER_INFO_PATH, serverInfoGuard } from 'lib/servers/models';
+import { SERVER_INFO_STORE } from 'lib/servers/models';
 import { tryCast, typeIs, guard } from 'lib/utils/typeGuard';
 import { execCallableAndWait } from 'lib/callables/execAndWait';
 import { ArgOf, AnyCallableDefinition, CallableOptions } from 'lib/callables/typedCallable';
@@ -12,6 +11,8 @@ import {
   LockId,
   serverCrawlerArgsGuard,
 } from 'lib/crawler/models';
+import { Store, StoreDef } from 'lib/stores/store';
+import { pathOf } from 'lib/utils/paths';
 
 export type ServerVisitor = ({
   currentHost,
@@ -30,7 +31,10 @@ const serverLockfileGuard = guard(
     typeIs(arg, Object) && 'locks' in arg && typeIs(arg.locks, Object),
 );
 
-const SERVER_LOCK_FILE_PATH = 'crawler/crawler.lock.json.txt';
+const CRAWLER_LOCK_STORE: StoreDef<ServerLockfile> = {
+  location: pathOf('crawler/crawler.lock.json.txt'),
+  loadGuard: serverLockfileGuard,
+};
 
 export class ServerCrawler<TDef extends AnyCallableDefinition> {
   constructor(
@@ -49,7 +53,7 @@ export class ServerCrawler<TDef extends AnyCallableDefinition> {
   }
 
   public async crawl(visitor: ServerVisitor) {
-    const serverInfo = files.tryLoadJson(this.ns, SERVER_INFO_PATH, serverInfoGuard);
+    const serverInfo = Store.openStore(this.ns, SERVER_INFO_STORE).tryLoad();
 
     if (serverInfo == null) {
       throw createNiceError('Server scanner has not ran on this node. Cannot run crawler');
@@ -59,7 +63,9 @@ export class ServerCrawler<TDef extends AnyCallableDefinition> {
 
     const { crawlerKey, lockId } = this.crawlerArgs;
 
-    const maybeLockfile = files.tryLoadJson(this.ns, SERVER_LOCK_FILE_PATH, serverLockfileGuard);
+    const lockfileStore = Store.openStore(this.ns, CRAWLER_LOCK_STORE);
+
+    const maybeLockfile = lockfileStore.tryLoad();
 
     if (maybeLockfile?.locks[crawlerKey] === lockId) {
       this.log.info(
@@ -74,7 +80,7 @@ export class ServerCrawler<TDef extends AnyCallableDefinition> {
 
     const updatedLockfile = maybeLockfile ?? { locks: {} };
     updatedLockfile.locks[crawlerKey] = lockId;
-    files.writeJson(this.ns, SERVER_LOCK_FILE_PATH, updatedLockfile);
+    lockfileStore.write(updatedLockfile);
 
     this.log.debug('Visiting host', ['hostname', hostname], ['visitableServers', servers]);
     for (const server of servers) {

@@ -1,4 +1,5 @@
 import { AnyCallableDefinition, TypedCallableDefinition } from 'lib/callables/typedCallable';
+import { pathOf } from 'lib/utils/paths';
 
 export type ExecCommand = {
   command: 'exec';
@@ -11,5 +12,5 @@ export type ExecArgs = {
 };
 
 export const EXEC_CALLABLE: TypedCallableDefinition<ExecArgs> = {
-  scriptPath: 'lib/exec/exec.ts',
+  scriptPath: pathOf('lib/exec/exec.ts'),
 };

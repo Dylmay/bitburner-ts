@@ -6,6 +6,7 @@ import {
   WEAKEN_SECURITY_CALLABLE,
 } from 'lib/hacks/models';
 import { ServerInfo, serverInfoGuard } from 'lib/servers/models';
+import { pathOf } from 'lib/utils/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export type ActionType = 'spin' | 'grow' | 'weaken' | 'hack';
@@ -23,7 +24,7 @@ export const ACTION_TYPE_TO_CALLABLE: { [K in ActionType]: AnyCallableDefinition
 };
 
 export const HACK_CRAWLER_CALLABLE: TypedCallableDefinition<HackCrawlerArgs> = {
-  scriptPath: 'lib/scripts/hack.ts',
+  scriptPath: pathOf('lib/scripts/hack.ts'),
 };
 
 export type InstallCrawlerOutputPortArgs = {
@@ -42,7 +43,7 @@ const installCrawlerOutputPortGuard = guard(
 
 export const INSTALL_CRAWLER_CALLABLE: TypedCallableDefinition<void, InstallCrawlerOutputPortArgs> =
   {
-    scriptPath: 'lib/scripts/install.ts',
+    scriptPath: pathOf('lib/scripts/install.ts'),
     outputPort: {
       port: 2345,
       guard: installCrawlerOutputPortGuard,
@@ -54,17 +55,17 @@ export type KillCrawlerArgs = {
 };
 
 export const KILL_CRAWLER_CALLABLE: TypedCallableDefinition<KillCrawlerArgs | undefined> = {
-  scriptPath: 'lib/scripts/kill.ts',
+  scriptPath: pathOf('lib/scripts/kill.ts'),
 };
 
 export const INFIL_CRAWLER_CALLABLE: TypedCallableDefinition<void> = {
-  scriptPath: 'lib/scripts/infil.ts',
+  scriptPath: pathOf('lib/scripts/infil.ts'),
 };
 
 export const REPORT_CRAWLER_CALLABLE: TypedCallableDefinition<void> = {
-  scriptPath: 'lib/scripts/report.ts',
+  scriptPath: pathOf('lib/scripts/report.ts'),
 };
 
 export const SCAN_CALLABLE: TypedCallableDefinition<void> = {
-  scriptPath: 'lib/scripts/scan.ts',
+  scriptPath: pathOf('lib/scripts/scan.ts'),
 };

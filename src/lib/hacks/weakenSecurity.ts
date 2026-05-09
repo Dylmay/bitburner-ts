@@ -17,6 +17,8 @@ export const main = typedMain(
     while (true) {
       const weakenAmount = await ns.weaken(target);
 
+      outputPort.write({ type: 'weaken', hostname: localhost, weakenAmount });
+
       log.info('Weakened target', ['target', target], ['weakenAmount', weakenAmount]);
     }
   },

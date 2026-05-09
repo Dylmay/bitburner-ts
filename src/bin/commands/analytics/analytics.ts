@@ -23,7 +23,6 @@ export const main = typedMain(
 
     const setTarget = await execCallableAndWait({
       ns,
-      log,
       callableDefinition: SET_TARGET_CALLABLE,
       hostname: donorHost,
       args: { target: args.target },
@@ -40,7 +39,6 @@ export const main = typedMain(
     for (const step of BUILD_ANALYTICS_STEPS) {
       const completed = await execCallableAndWait({
         ns,
-        log,
         callableDefinition: step,
         hostname: donorHost,
       });
@@ -52,7 +50,6 @@ export const main = typedMain(
 
     const completed = await execCallableAndWait({
       ns,
-      log,
       callableDefinition: GET_ANALYTICS_CALLABLE,
       hostname: donorHost,
     });

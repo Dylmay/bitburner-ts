@@ -22,7 +22,6 @@ export const main = typedMain(EXEC_CALLABLE, async ({ ns, log }, args) => {
     hostname: hostToExecTo,
     callableDefinition: definition,
     args: processArgs,
-    log,
   });
 
   if (!pid) {

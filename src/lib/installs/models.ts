@@ -1,9 +1,10 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
+import { StoreDef } from 'lib/stores/store';
+import { pathOf } from 'lib/utils/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export const LIB_FOLDER = 'lib';
 export const BIN_FOLDER = 'bin';
-export const FILES_LOCK = 'lib/.files.lock.txt';
 
 export type FileInfo = {
   ramUsage: number | undefined;
@@ -18,6 +19,11 @@ export const installDataGuard = guard(
     typeIs(arg, Object) && 'filenameToInfo' in arg && typeIs(arg.filenameToInfo, Object),
 );
 
+export const INSTALL_DATA_STORE: StoreDef<InstallData> = {
+  location: pathOf('lib/.files.lock.json'),
+  loadGuard: installDataGuard,
+};
+
 export const SAVE_LIB_CALLABLE: TypedCallableDefinition<void> = {
-  scriptPath: 'lib/installs/saveLib.ts',
+  scriptPath: pathOf('lib/installs/saveLib.ts'),
 };

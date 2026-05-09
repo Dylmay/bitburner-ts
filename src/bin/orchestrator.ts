@@ -10,8 +10,8 @@ import { swarmCommand, SwarmCommand } from 'bin/commands/swarm/models';
 import { spinCommand, SpinCommand } from 'bin/commands/spin/models';
 import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
-import * as files from 'lib/utils/files';
 import { Logger } from 'lib/utils/logging/logger';
+import { Path, pathOf } from 'lib/utils/paths';
 
 export type AvailableCommands =
   | AnalyticsCommand
@@ -47,7 +47,7 @@ export const COMMANDS: {
 };
 
 export async function main(ns: NS) {
-  const log = Logger.getLogger(ns, 'orchestrator.ts');
+  const log = Logger.getLogger(ns, pathOf('bin/orchestrator.ts'));
 
   const { host, remaining } = extractHost(ns.args);
   const { portOutputPath, remaining: remainingArgs } = extractPortOutputPath(remaining);
@@ -108,11 +108,11 @@ const extractHost = (args: ScriptArg[]): { host?: string; remaining: ScriptArg[]
 
 const extractPortOutputPath = (
   args: ScriptArg[],
-): { portOutputPath?: files.Path; remaining: ScriptArg[] } => {
+): { portOutputPath?: Path; remaining: ScriptArg[] } => {
   const hostIdx = args.findIndex((a) => a === '--port-output');
   if (hostIdx === -1 || !typeIs(args[hostIdx + 1], 'string')) return { remaining: args };
   const remaining = args.filter((_, i) => i !== hostIdx && i !== hostIdx + 1);
-  return { portOutputPath: args[hostIdx + 1] as string, remaining };
+  return { portOutputPath: pathOf(args[hostIdx + 1] as string), remaining };
 };
 
 const printHelp = (ns: NS) => {

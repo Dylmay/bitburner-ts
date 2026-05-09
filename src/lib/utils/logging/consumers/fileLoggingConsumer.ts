@@ -1,7 +1,8 @@
 import * as files from 'lib/utils/files';
-import { LogConsumer } from 'lib/utils/logging/logger';
+import { LogConsumer, StructuredLogMessage } from 'lib/utils/logging/logger';
+import { Path } from 'lib/utils/paths';
 
 export const createFileLogConsumer =
-  (ns: NS, path: files.Path): LogConsumer =>
-  (message: string) =>
-    files.append(ns, path, message);
+  (ns: NS, path: Path): LogConsumer =>
+  (logMessage: StructuredLogMessage) =>
+    files.append(ns, path, logMessage);

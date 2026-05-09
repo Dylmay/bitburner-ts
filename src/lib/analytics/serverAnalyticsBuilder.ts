@@ -1,6 +1,7 @@
+import { pathOf } from 'lib/utils/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
-export const SERVER_ANALYTICS_BUILDER_PATH = 'analytics/builder.analytics.json.txt';
+export const SERVER_ANALYTICS_BUILDER_PATH = pathOf('analytics/builder.analytics.json.txt');
 
 export type ServerAnalyticsBuilderTarget = {
   hostname: string;

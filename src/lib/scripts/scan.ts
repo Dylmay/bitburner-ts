@@ -4,23 +4,23 @@ import { INSTALL_CRAWLER_CALLABLE } from 'lib/scripts/models';
 import { PortHandle } from 'lib/utils/ports';
 import { runCallable } from 'lib/callables/run';
 import { createNiceError } from 'lib/utils/errors';
-import * as files from 'lib/utils/files';
-import { NETWORK_REPORT_PATH, NetworkReport, ServerName } from 'lib/reports/models';
+import { NETWORK_REPORT_STORE, NetworkReport, ServerName } from 'lib/reports/models';
 import { ServerInfo } from 'lib/servers/models';
 import { LogLevel } from 'lib/utils/logging/logger';
 import { createPortLogger } from 'lib/utils/logging/portLogger';
+import { Store } from 'lib/stores/store';
 
 const LOGGING_PORT = 12352;
 
 export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
   // TODO(dmayor): Fix the output port model (types shouldn't need casting/banging)
-  const installCrawlerOutputPort = INSTALL_CRAWLER_CALLABLE.outputPort!;
-
-  const listeningPort = PortHandle.connectToPort(ns, installCrawlerOutputPort, log);
+  const listeningPort = PortHandle.connectToPort(ns, INSTALL_CRAWLER_CALLABLE.outputPort!, log);
   listeningPort.clearPort();
 
   const loggingPort = createPortLogger(LOGGING_PORT);
   const loggingPortHandle = PortHandle.connectToPort(ns, loggingPort);
+
+  const networkReportStore = Store.openStore(ns, NETWORK_REPORT_STORE);
 
   const installCrawlerPid = runCallable({
     ns,
@@ -44,7 +44,7 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
     // TODO(dmayor): use structured responses for logging
     let maybeData = loggingPortHandle.read() ?? null;
     while (maybeData != null) {
-      log.debug(maybeData);
+      log.info('received log message', ['logMessage', maybeData]);
 
       maybeData = loggingPortHandle.read() ?? null;
     }
@@ -55,7 +55,7 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
 
   let maybeData = loggingPortHandle.read();
   while (maybeData) {
-    log.debug(maybeData);
+    log.info('received log message', ['logMessage', maybeData]);
 
     maybeData = loggingPortHandle.read();
   }
@@ -73,7 +73,7 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
 
   log.info(
     'Completed reporting. Writing to report path',
-    ['reportPath', NETWORK_REPORT_PATH],
+    ['reportPath', NETWORK_REPORT_STORE.location],
     ['notVisitedServers', serversNotVisited],
   );
   const networkReport: NetworkReport = {
@@ -82,10 +82,10 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
     allServers: allDistinctServers.keys().toArray(),
   };
 
-  files.writeJson(ns, NETWORK_REPORT_PATH, networkReport);
+  networkReportStore.write(networkReport);
 
   log.info('Exporting network report to all nodes');
   for (const server of networkReport.allServers) {
-    ns.scp(NETWORK_REPORT_PATH, server);
+    ns.scp(NETWORK_REPORT_STORE.location.path, server);
   }
 });

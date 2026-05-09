@@ -1,8 +1,9 @@
 import { typedMain } from 'lib/callables/typedCallable';
-import * as files from 'lib/utils/files';
-import { NETWORK_REPORT_PATH, networkReportGuard, ServerName } from 'lib/reports/models';
+import { NETWORK_REPORT_STORE, ServerName } from 'lib/reports/models';
 import { createNiceError } from 'lib/utils/errors';
 import { STATS_CALLABLE } from 'bin/commands/stats/models';
+import { ServerInfo } from 'lib/servers/models';
+import { Store } from 'lib/stores/store';
 
 type UnstableServerMetrics = {
   moneyAvailable: number;
@@ -21,7 +22,9 @@ type ServerReport = {
 };
 
 export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
-  const { serverToServerInfo } = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
+  const networkReportStore = Store.openStore(ns, NETWORK_REPORT_STORE);
+
+  const { serverToServerInfo } = networkReportStore.load();
 
   const orderBy = args?.orderBy ?? 'growth';
 
@@ -36,6 +39,8 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
           return serverInfoA.unstable.moneyAvailable - serverInfoB.unstable.moneyAvailable;
         case 'ramAvailable':
           return serverInfoA.ram - serverInfoB.ram;
+        case 'perTick':
+          return getMaxMoneyPerTick(ns, serverInfoA) - getMaxMoneyPerTick(ns, serverInfoB);
         default: {
           const cannotOrderBy: never = orderBy;
           throw createNiceError('Unsupported ordering', ['orderBy', cannotOrderBy]);
@@ -77,3 +82,13 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
 
   ns.alert(`Reports ordered by ${orderBy}\n` + stringifiedReports);
 });
+
+const getMaxMoneyPerTick = (
+  ns: NS,
+  { minSecurityLevel, baseSecurityLevel, hostname, maxMoney }: ServerInfo,
+): number => {
+  const hackTime = ns.getHackTime(hostname);
+  const hackTimeAtMinSecurity = (hackTime / baseSecurityLevel) * minSecurityLevel;
+
+  return maxMoney / hackTimeAtMinSecurity;
+};

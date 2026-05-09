@@ -1,11 +1,10 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
-import * as files from 'lib/utils/files';
+import { StoreDef } from 'lib/stores/store';
+import { pathOf } from 'lib/utils/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
-export const LOCK_FILENAME = 'hack-all.lock.txt';
 export const RUN_FOLDER = 'hacked';
 export const LATEST_RUN_FILENAME = RUN_FOLDER + '/' + 'latest-run.txt';
-export const SERVER_INFO_PATH = 'info/server.json.txt';
 
 export type RunLock = string;
 
@@ -81,7 +80,10 @@ export const serverInfoGuard = guard((arg: unknown): arg is ServerInfo => {
   return true;
 });
 
-export const getRunFolder = (runUid: string): files.Path => RUN_FOLDER + '/' + runUid;
+export const SERVER_INFO_STORE: StoreDef<ServerInfo> = {
+  location: pathOf('info/server.json'),
+  loadGuard: serverInfoGuard,
+};
 
 export type GetServerInfoOutputPortArgs = {
   host: string;
@@ -99,7 +101,7 @@ const getServerInfoOutputPortGuard = guard(
 
 export const GET_SERVER_INFO_CALLABLE: TypedCallableDefinition<void, GetServerInfoOutputPortArgs> =
   {
-    scriptPath: 'lib/servers/getServerInfo.ts',
+    scriptPath: pathOf('lib/servers/getServerInfo.ts'),
     outputPort: {
       port: 2346,
       guard: getServerInfoOutputPortGuard,
