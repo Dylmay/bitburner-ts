@@ -229,7 +229,8 @@ const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
 
   const sortedBestTargets = Object.values(report.serverToServerInfo)
     .filter(
-      ({ maxMoney, requiredHackingLevel }) => maxMoney > 0 && requiredHackingLevel <= playerLevel,
+      ({ maxMoney, requiredHackingLevel, unstable }) =>
+        maxMoney > 0 && requiredHackingLevel <= playerLevel && unstable.hasRootAccess,
     )
     .sort((a, b) => getMaxMoneyPerTick(a) - getMaxMoneyPerTick(b));
   // get best potential hacking times

@@ -1,6 +1,6 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { ServerInfo, serverInfoGuard } from 'lib/servers/models';
-import { createTempPath } from 'lib/utils/files/paths';
+import { createTempPath, Path } from 'lib/utils/files/paths';
 import * as files from 'lib/utils/files/files';
 import { BUILD_SERVER_INFO_STEPS, BuilderArgs } from 'lib/servers/steps/models';
 
@@ -11,7 +11,7 @@ export const buildServerInfoLocally = async (
     callableDefinition: TypedCallableDefinition<BuilderArgs>,
     args: BuilderArgs,
   ) => Promise<void>,
-): Promise<ServerInfo> => {
+): Promise<[ServerInfo, Path]> => {
   const tempPath = createTempPath();
 
   files.writeJson(ns, tempPath, { hostname: targetHost });
@@ -21,5 +21,5 @@ export const buildServerInfoLocally = async (
     await executor(step, { outputPath: tempPath });
   }
 
-  return files.loadJson(ns, tempPath, serverInfoGuard);
+  return [files.loadJson(ns, tempPath, serverInfoGuard), tempPath];
 };
