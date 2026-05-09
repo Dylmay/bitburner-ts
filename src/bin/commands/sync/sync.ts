@@ -17,7 +17,7 @@ const buildLocalServerInfo = async (ns: NS) => {
   }
 };
 
-export const runSync = async (ns: NS) => {
+export const main = typedMain(SYNC_COMMAND_CALLABLE, async ({ ns }) => {
   await buildLocalServerInfo(ns);
 
   const saveLibPid = await runCallableAndWait({ ns, callableDefinition: SAVE_LIB_CALLABLE });
@@ -30,6 +30,4 @@ export const runSync = async (ns: NS) => {
     callableDefinition: SCAN_CALLABLE,
     callableOptions: { logLevel: LogLevel.DEBUG },
   });
-};
-
-export const main = typedMain(SYNC_COMMAND_CALLABLE, async ({ ns }) => runSync(ns));
+});

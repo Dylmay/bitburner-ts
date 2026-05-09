@@ -3,6 +3,7 @@ import { createNiceErrorWithCause } from 'lib/utils/errors';
 import { Path } from 'lib/utils/files/paths';
 
 export const LOG_NAME = 'logger.ts';
+
 export const writeJson = <T extends object>(ns: NS, { path }: Path, data: T) => {
   const stringifiedData = JSON.stringify(data, null, 2);
 

@@ -19,3 +19,7 @@ export const pathOf = (path: string): Path => ({
   __path_type: 'path',
   path: path.startsWith('/') ? path : '/' + path,
 });
+
+const TEMP_FOLDER = pathOf('/tmp');
+
+export const createTempPath = (): Path => pathOf(TEMP_FOLDER.path + crypto.randomUUID());

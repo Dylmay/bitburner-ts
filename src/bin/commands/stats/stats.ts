@@ -17,7 +17,7 @@ type ServerReport = {
   baseSecurityLevel: number;
   ram: number;
   requiredHackingLevel: number;
-  ip: string;
+  ip: string | undefined; // TODO(dmayor): either drop ip again or make it so we can set it from another node
   unstableServerMetrics: UnstableServerMetrics;
 };
 

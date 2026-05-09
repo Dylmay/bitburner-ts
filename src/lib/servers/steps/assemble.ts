@@ -6,6 +6,7 @@ import { ASSEMBLE_CALLABLE } from 'lib/servers/steps/models';
 import { Store } from 'lib/stores/store';
 
 export const main = typedMain(ASSEMBLE_CALLABLE, async ({ ns }) => {
+  // TODO(dmayor): This can easily break with the builder
   const builder = files.loadJson(ns, SERVER_INFO_BUILDER_PATH, serverInfoGuard);
 
   Store.openStore(ns, SERVER_INFO_STORE).write({
@@ -22,6 +23,7 @@ export const main = typedMain(ASSEMBLE_CALLABLE, async ({ ns }) => {
       files: builder.unstable.files,
       moneyAvailable: builder.unstable.moneyAvailable,
       securityLevel: builder.unstable.securityLevel,
+      hasRootAccess: builder.unstable.hasRootAccess,
     },
   });
 });

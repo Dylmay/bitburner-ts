@@ -39,6 +39,7 @@ export type UnstableServerInfo = {
   files: string[];
   moneyAvailable: number;
   securityLevel: number;
+  hasRootAccess: boolean;
 };
 
 // export type StringDate = {
@@ -48,6 +49,7 @@ export type UnstableServerInfo = {
 
 export type ServerInfo = {
   hostname: string;
+  ip: string | undefined;
   ram: number;
   connectableServers: string[];
   maxMoney: number;
@@ -55,7 +57,6 @@ export type ServerInfo = {
   baseSecurityLevel: number;
   growthLevel: number;
   requiredHackingLevel: number;
-  ip: string;
   unstable: UnstableServerInfo;
   // collectedAt: StringDate;
 };
@@ -63,6 +64,7 @@ export type ServerInfo = {
 export const serverInfoGuard = guard((arg: unknown): arg is ServerInfo => {
   if (!typeIs(arg, Object)) return false;
   if (!('hostname' in arg) || !typeIs(arg.hostname, 'string')) return false;
+  if ('ip' in arg && !typeIs(arg.ip, 'string')) return false;
   if (!('ram' in arg) || !typeIs(arg.ram, 'number')) return false;
   if (!('connectableServers' in arg) || !Array.isArray(arg.connectableServers)) return false;
   if (!('maxMoney' in arg) || !typeIs(arg.maxMoney, 'number')) return false;
@@ -71,12 +73,12 @@ export const serverInfoGuard = guard((arg: unknown): arg is ServerInfo => {
   if (!('unstable' in arg) || !typeIs(arg.unstable, Object)) return false;
   if (!('growthLevel' in arg) || !typeIs(arg.growthLevel, 'number')) return false;
   if (!('requiredHackingLevel' in arg) || !typeIs(arg.requiredHackingLevel, 'number')) return false;
-  if (!('ip' in arg) || !typeIs(arg.ip, 'string')) return false;
 
   const { unstable } = arg;
   if (!('files' in unstable) || !Array.isArray(unstable.files)) return false;
   if (!('moneyAvailable' in unstable) || !typeIs(unstable.moneyAvailable, 'number')) return false;
   if (!('securityLevel' in unstable) || !typeIs(unstable.securityLevel, 'number')) return false;
+  if (!('hasRootAccess' in unstable) || !typeIs(unstable.hasRootAccess, 'boolean')) return false;
   return true;
 });
 

@@ -7,6 +7,10 @@ export type ServerInfoBuilderHostname = {
   hostname: string;
 };
 
+export type ServerInfoBuilderIp = {
+  ip?: string;
+} & ServerInfoBuilderRequiredHackingLevel;
+
 export type ServerInfoBuilderRam = {
   ram: number;
 } & ServerInfoBuilderHostname;
@@ -35,15 +39,11 @@ export type ServerInfoBuilderRequiredHackingLevel = {
   requiredHackingLevel: number;
 } & ServerInfoBuilderGrowthLevel;
 
-export type ServerInfoBuilderIp = {
-  ip: string;
-} & ServerInfoBuilderRequiredHackingLevel;
-
 export type UnstableServerInfoBuilderFiles = {
   unstable: {
     files: string[];
   };
-} & ServerInfoBuilderIp;
+} & ServerInfoBuilderRequiredHackingLevel;
 
 export type UnstableServerInfoBuilderMoneyAvailable = {
   unstable: {
@@ -137,5 +137,18 @@ export const unstableServerInfoBuilderSecurityLevelGuard = guard(
   (arg: unknown): arg is UnstableServerInfoBuilderSecurityLevel => {
     if (!typeIs(arg, unstableServerInfoBuilderMoneyAvailableGuard)) return false;
     return 'securityLevel' in arg.unstable && typeIs(arg.unstable.securityLevel, 'number');
+  },
+);
+
+export type UnstableServerInfoBuilderHasRootAccess = {
+  unstable: {
+    hasRootAccess: boolean;
+  };
+} & UnstableServerInfoBuilderSecurityLevel;
+
+export const unstableServerInfoBuilderHasRootAccessGuard = guard(
+  (arg: unknown): arg is UnstableServerInfoBuilderHasRootAccess => {
+    if (!typeIs(arg, unstableServerInfoBuilderSecurityLevelGuard)) return false;
+    return 'hasRootAccess' in arg.unstable && typeIs(arg.unstable.hasRootAccess, 'boolean');
   },
 );
