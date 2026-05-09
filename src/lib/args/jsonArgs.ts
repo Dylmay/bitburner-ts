@@ -1,4 +1,4 @@
-import { guard, typeIs, Guard, cast } from 'lib/utils/typeGuard';
+import { Guard, cast, typeIs, objectGuard, literal } from 'lib/utils/typeGuard';
 import { InternalServerCrawlerArgs } from 'lib/crawler/models';
 import { CallableOptions } from 'lib/callables/typedCallable';
 import { createNiceError } from 'lib/utils/errors';
@@ -56,10 +56,6 @@ export const toJsonArgs = <T>(
   return JSON.stringify(wrappedArgs);
 };
 
-const jsonArgGuard = guard(
-  (json: unknown): json is JsonArgs<unknown> =>
-    typeIs(json, Object) &&
-    'argType' in json &&
-    typeIs(json.argType, 'string') &&
-    json.argType === 'json',
-);
+const jsonArgGuard = objectGuard<JsonArgs<unknown>>({
+  argType: literal('json'),
+});

@@ -1,7 +1,7 @@
 import { CommandFor } from 'bin/commands/models';
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { pathOf } from 'lib/utils/files/paths';
-import { cast, guard, typeIs } from 'lib/utils/typeGuard';
+import { cast, enumGuard } from 'lib/utils/typeGuard';
 
 type OrderBy = 'growth' | 'moneyAvailable' | 'maxMoney' | 'ramAvailable' | 'perTick';
 
@@ -9,11 +9,7 @@ type StatsArgs = {
   orderBy: OrderBy;
 };
 
-const orderByGuard = guard(
-  (args: unknown): args is OrderBy =>
-    typeIs(args, 'string') &&
-    ['growth', 'moneyAvailable', 'maxMoney', 'ramAvailable', 'perTick'].includes(args),
-);
+const orderByGuard = enumGuard<OrderBy>(['growth', 'moneyAvailable', 'maxMoney', 'ramAvailable', 'perTick']);
 
 export const STATS_CALLABLE: TypedCallableDefinition<StatsArgs> = {
   scriptPath: pathOf('bin/commands/stats/stats.ts'),

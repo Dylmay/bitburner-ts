@@ -1,5 +1,5 @@
 import { pathOf } from 'lib/utils/files/paths';
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard, extendGuard, optional, array } from 'lib/utils/typeGuard';
 
 export const SERVER_INFO_BUILDER_PATH = pathOf('info/builder.server.json');
 
@@ -61,84 +61,64 @@ export type CompleteServerInfoBuilder = ServerInfoBuilderConnectableServers &
   ServerInfoBuilderBaseSecurityLevel &
   UnstableServerInfoBuilderSecurityLevel;
 
-export const serverInfoBuilderHostnameGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderHostname =>
-    typeIs(arg, Object) && 'hostname' in arg && typeIs(arg.hostname, 'string'),
+export const serverInfoBuilderHostnameGuard = objectGuard<ServerInfoBuilderHostname>({
+  hostname: 'string',
+});
+
+export const serverInfoBuilderRamGuard = extendGuard<ServerInfoBuilderRam>(
+  serverInfoBuilderHostnameGuard,
+  { ram: 'number' },
 );
 
-export const serverInfoBuilderRamGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderRam =>
-    typeIs(arg, serverInfoBuilderHostnameGuard) && 'ram' in arg && typeIs(arg.ram, 'number'),
+export const serverInfoBuilderConnectableServersGuard =
+  extendGuard<ServerInfoBuilderConnectableServers>(serverInfoBuilderRamGuard, {
+    connectableServers: array(),
+  });
+
+export const serverInfoBuilderMaxMoneyGuard = extendGuard<ServerInfoBuilderMaxMoney>(
+  serverInfoBuilderRamGuard,
+  { maxMoney: 'number' },
 );
 
-export const serverInfoBuilderConnectableServersGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderConnectableServers =>
-    typeIs(arg, serverInfoBuilderRamGuard) &&
-    'connectableServers' in arg &&
-    Array.isArray(arg.connectableServers),
+export const serverInfoBuilderMinSecurityLevelGuard =
+  extendGuard<ServerInfoBuilderMinSecurityLevel>(serverInfoBuilderMaxMoneyGuard, {
+    minSecurityLevel: 'number',
+  });
+
+export const serverInfoBuilderBaseSecurityLevelGuard =
+  extendGuard<ServerInfoBuilderBaseSecurityLevel>(serverInfoBuilderMinSecurityLevelGuard, {
+    baseSecurityLevel: 'number',
+  });
+
+export const serverInfoBuilderGrowthLevelGuard = extendGuard<ServerInfoBuilderGrowthLevel>(
+  serverInfoBuilderBaseSecurityLevelGuard,
+  { growthLevel: 'number' },
 );
 
-export const serverInfoBuilderMaxMoneyGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderMaxMoney =>
-    typeIs(arg, serverInfoBuilderRamGuard) && 'maxMoney' in arg && typeIs(arg.maxMoney, 'number'),
+export const serverInfoBuilderRequiredHackingLevelGuard =
+  extendGuard<ServerInfoBuilderRequiredHackingLevel>(serverInfoBuilderGrowthLevelGuard, {
+    requiredHackingLevel: 'number',
+  });
+
+export const serverInfoBuilderIpGuard = extendGuard<ServerInfoBuilderIp>(
+  serverInfoBuilderRequiredHackingLevelGuard,
+  { ip: optional('string') },
 );
 
-export const serverInfoBuilderMinSecurityLevelGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderMinSecurityLevel =>
-    typeIs(arg, serverInfoBuilderMaxMoneyGuard) &&
-    'minSecurityLevel' in arg &&
-    typeIs(arg.minSecurityLevel, 'number'),
+export const unstableServerInfoBuilderFilesGuard = extendGuard<UnstableServerInfoBuilderFiles>(
+  serverInfoBuilderIpGuard,
+  { unstable: objectGuard<{ files: string[] }>({ files: array() }) },
 );
 
-export const serverInfoBuilderBaseSecurityLevelGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderBaseSecurityLevel =>
-    typeIs(arg, serverInfoBuilderMinSecurityLevelGuard) &&
-    'baseSecurityLevel' in arg &&
-    typeIs(arg.baseSecurityLevel, 'number'),
-);
+export const unstableServerInfoBuilderMoneyAvailableGuard =
+  extendGuard<UnstableServerInfoBuilderMoneyAvailable>(unstableServerInfoBuilderFilesGuard, {
+    unstable: objectGuard<{ moneyAvailable: number }>({ moneyAvailable: 'number' }),
+  });
 
-export const serverInfoBuilderGrowthLevelGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderGrowthLevel => {
-    if (!typeIs(arg, serverInfoBuilderBaseSecurityLevelGuard)) return false;
-    return 'growthLevel' in arg && typeIs(arg.growthLevel, 'number');
-  },
-);
-
-export const serverInfoBuilderRequiredHackingLevelGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderRequiredHackingLevel =>
-    typeIs(arg, serverInfoBuilderGrowthLevelGuard) &&
-    'requiredHackingLevel' in arg &&
-    typeIs(arg.requiredHackingLevel, 'number'),
-);
-
-export const serverInfoBuilderIpGuard = guard(
-  (arg: unknown): arg is ServerInfoBuilderIp =>
-    typeIs(arg, serverInfoBuilderRequiredHackingLevelGuard) &&
-    'ip' in arg &&
-    typeIs(arg.ip, 'string'),
-);
-
-export const unstableServerInfoBuilderFilesGuard = guard(
-  (arg: unknown): arg is UnstableServerInfoBuilderFiles => {
-    if (!typeIs(arg, serverInfoBuilderIpGuard)) return false;
-    if (!('unstable' in arg) || !typeIs(arg.unstable, Object)) return false;
-    return 'files' in arg.unstable && Array.isArray(arg.unstable.files);
-  },
-);
-
-export const unstableServerInfoBuilderMoneyAvailableGuard = guard(
-  (arg: unknown): arg is UnstableServerInfoBuilderMoneyAvailable => {
-    if (!typeIs(arg, unstableServerInfoBuilderFilesGuard)) return false;
-    return 'moneyAvailable' in arg.unstable && typeIs(arg.unstable.moneyAvailable, 'number');
-  },
-);
-
-export const unstableServerInfoBuilderSecurityLevelGuard = guard(
-  (arg: unknown): arg is UnstableServerInfoBuilderSecurityLevel => {
-    if (!typeIs(arg, unstableServerInfoBuilderMoneyAvailableGuard)) return false;
-    return 'securityLevel' in arg.unstable && typeIs(arg.unstable.securityLevel, 'number');
-  },
-);
+export const unstableServerInfoBuilderSecurityLevelGuard =
+  extendGuard<UnstableServerInfoBuilderSecurityLevel>(unstableServerInfoBuilderMoneyAvailableGuard, {
+    unstable: objectGuard<{ securityLevel: number }>({ securityLevel: 'number' }),
+  });
 
 export type UnstableServerInfoBuilderHasRootAccess = {
   unstable: {
@@ -146,9 +126,7 @@ export type UnstableServerInfoBuilderHasRootAccess = {
   };
 } & UnstableServerInfoBuilderSecurityLevel;
 
-export const unstableServerInfoBuilderHasRootAccessGuard = guard(
-  (arg: unknown): arg is UnstableServerInfoBuilderHasRootAccess => {
-    if (!typeIs(arg, unstableServerInfoBuilderSecurityLevelGuard)) return false;
-    return 'hasRootAccess' in arg.unstable && typeIs(arg.unstable.hasRootAccess, 'boolean');
-  },
-);
+export const unstableServerInfoBuilderHasRootAccessGuard =
+  extendGuard<UnstableServerInfoBuilderHasRootAccess>(unstableServerInfoBuilderSecurityLevelGuard, {
+    unstable: objectGuard<{ hasRootAccess: boolean }>({ hasRootAccess: 'boolean' }),
+  });

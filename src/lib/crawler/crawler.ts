@@ -1,6 +1,6 @@
 import { Logger } from 'lib/utils/logging/logger';
 import { SERVER_INFO_STORE } from 'lib/servers/models';
-import { tryCast, typeIs, guard } from 'lib/utils/typeGuard';
+import { tryCast, typeIs, objectGuard } from 'lib/utils/typeGuard';
 import { execCallableAndWait } from 'lib/callables/execAndWait';
 import { ArgOf, AnyCallableDefinition, CallableOptions } from 'lib/callables/typedCallable';
 import { parseCrawlerJsonArgs, parseJsonArgsCallableOptions } from 'lib/args/jsonArgs';
@@ -26,10 +26,9 @@ type ServerLockfile = {
   locks: { [key: CrawlerKey]: LockId };
 };
 
-const serverLockfileGuard = guard(
-  (arg: unknown): arg is ServerLockfile =>
-    typeIs(arg, Object) && 'locks' in arg && typeIs(arg.locks, Object),
-);
+const serverLockfileGuard = objectGuard<ServerLockfile>({
+  locks: Object,
+});
 
 const CRAWLER_LOCK_STORE: StoreDef<ServerLockfile> = {
   location: pathOf('crawler/crawler.lock.json.txt'),

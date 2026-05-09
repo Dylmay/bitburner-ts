@@ -1,4 +1,4 @@
-import { typeIs, tryCast, guard } from 'lib/utils/typeGuard';
+import { typeIs, tryCast, enumGuard } from 'lib/utils/typeGuard';
 import { createNiceError } from 'lib/utils/errors';
 import { ActionType, HACK_CRAWLER_CALLABLE } from 'lib/scripts/models';
 import { CommandFor } from 'bin/commands/models';
@@ -36,7 +36,4 @@ export const validHackActions = [
   'spin',
 ] as const satisfies readonly ActionType[];
 
-export const hackActionGuard = guard(
-  (action: ScriptArg): action is ActionType =>
-    typeIs(action, 'string') && (validHackActions as readonly string[]).includes(action),
-);
+export const hackActionGuard = enumGuard<ActionType>(validHackActions);

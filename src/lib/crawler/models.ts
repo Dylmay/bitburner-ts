@@ -1,4 +1,4 @@
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard, literal } from 'lib/utils/typeGuard';
 
 export type CrawlerKey = string;
 export type LockId = string;
@@ -9,14 +9,8 @@ export type InternalServerCrawlerArgs = {
   lockId: LockId;
 };
 
-export const serverCrawlerArgsGuard = guard(
-  (arg: unknown): arg is InternalServerCrawlerArgs =>
-    typeIs(arg, Object) &&
-    'crawlerKey' in arg &&
-    typeIs(arg.crawlerKey, 'string') &&
-    'lockId' in arg &&
-    typeIs(arg.lockId, 'string') &&
-    '__type' in arg &&
-    typeIs(arg.__type, 'string') &&
-    arg.__type === 'serverCrawlerArgs',
-);
+export const serverCrawlerArgsGuard = objectGuard<InternalServerCrawlerArgs>({
+  __type: literal('serverCrawlerArgs'),
+  crawlerKey: 'string',
+  lockId: 'string',
+});

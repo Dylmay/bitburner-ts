@@ -1,5 +1,5 @@
 import { Path } from 'lib/utils/files/paths';
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard, array } from 'lib/utils/typeGuard';
 
 export type LogArg = [string, unknown];
 
@@ -13,17 +13,13 @@ export type StructuredLogMessage = {
   logLevel: LogLevel;
 };
 
-export const structuredLogMessageGuard = guard(
-  (arg: unknown): arg is StructuredLogMessage =>
-    typeIs(arg, Object) &&
-    'message' in arg &&
-    typeIs(arg.message, 'string') &&
-    'args' in arg &&
-    'context' in arg &&
-    'scriptName' in arg &&
-    typeIs(arg.scriptName, 'string') &&
-    'logLevel' in arg,
-);
+export const structuredLogMessageGuard = objectGuard<StructuredLogMessage>({
+  message: 'string',
+  args: array(),
+  context: array(),
+  scriptName: 'string',
+  logLevel: 'number',
+});
 
 export enum LogLevel {
   TRACE = 0,

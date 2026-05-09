@@ -1,7 +1,7 @@
 import { ServerInfo } from 'lib/servers/models';
 import { StoreDef } from 'lib/stores/store';
 import { pathOf } from 'lib/utils/files/paths';
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard, array } from 'lib/utils/typeGuard';
 
 export type ServerName = string;
 
@@ -11,10 +11,11 @@ export type NetworkReport = {
   serversNotVisited: string[];
 };
 
-export const networkReportGuard = guard(
-  (arg: unknown): arg is NetworkReport =>
-    typeIs(arg, Object) && 'serverToServerInfo' in arg && typeIs(arg.serverToServerInfo, Object),
-);
+export const networkReportGuard = objectGuard<NetworkReport>({
+  serverToServerInfo: Object,
+  allServers: array(),
+  serversNotVisited: array(),
+});
 
 export const NETWORK_REPORT_STORE: StoreDef<NetworkReport> = {
   location: pathOf('report/network.report.json'),

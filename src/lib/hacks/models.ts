@@ -1,7 +1,7 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { pathOf } from 'lib/utils/files/paths';
 import { Port } from 'lib/utils/ports';
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard } from 'lib/utils/typeGuard';
 
 export type HackArgs = {
   target?: string | undefined;
@@ -33,14 +33,10 @@ export type WeakenSecurityOutput = {
 
 export type HackOutput = GrowMoneyOutput | HackMoneyOutput | WeakenSecurityOutput;
 
-export const hackOutputGuard = guard(
-  (arg: unknown): arg is HackOutput =>
-    typeIs(arg, Object) &&
-    'type' in arg &&
-    typeIs(arg.type, 'string') &&
-    'hostname' in arg &&
-    typeIs(arg.hostname, 'string'),
-);
+export const hackOutputGuard = objectGuard<HackOutput>({
+  type: 'string',
+  hostname: 'string',
+});
 
 export const HACK_OUTPUT_PORT: Port<HackOutput> = {
   port: 1337,

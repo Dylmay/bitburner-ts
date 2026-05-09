@@ -127,7 +127,10 @@ const printHelp = (ns: NS) => {
 
 type CommandName = Command<never, never>['command'];
 
-const commandNameGuard = guard(
-  (cmd: ScriptArg): cmd is CommandName =>
-    typeIs(cmd, 'string') && (cmd === 'help' || Object.keys(COMMANDS).includes(cmd)),
-);
+const commandNameGuard = guard<CommandName | 'help'>((cmd) => {
+  if (!typeIs(cmd, 'string'))
+    return { ok: false, failures: [{ path: [], reason: `expected string, got ${typeof cmd}` }] };
+  if (cmd === 'help' || Object.keys(COMMANDS).includes(cmd))
+    return { ok: true, value: cmd as CommandName | 'help' };
+  return { ok: false, failures: [{ path: [], reason: `"${cmd}" is not a valid command` }] };
+});

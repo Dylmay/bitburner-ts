@@ -7,7 +7,7 @@ import {
 } from 'lib/hacks/models';
 import { ServerInfo, serverInfoGuard } from 'lib/servers/models';
 import { pathOf } from 'lib/utils/files/paths';
-import { guard, typeIs } from 'lib/utils/typeGuard';
+import { objectGuard } from 'lib/utils/typeGuard';
 
 export type ActionType = 'spin' | 'grow' | 'weaken' | 'hack';
 
@@ -32,14 +32,10 @@ export type InstallCrawlerOutputPortArgs = {
   serverInfo: ServerInfo;
 };
 
-const installCrawlerOutputPortGuard = guard(
-  (arg: unknown): arg is InstallCrawlerOutputPortArgs =>
-    typeIs(arg, Object) &&
-    'host' in arg &&
-    typeIs(arg.host, 'string') &&
-    'serverInfo' in arg &&
-    typeIs(arg.serverInfo, serverInfoGuard),
-);
+const installCrawlerOutputPortGuard = objectGuard<InstallCrawlerOutputPortArgs>({
+  host: 'string',
+  serverInfo: serverInfoGuard,
+});
 
 export const INSTALL_CRAWLER_CALLABLE: TypedCallableDefinition<void, InstallCrawlerOutputPortArgs> =
   {
