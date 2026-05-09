@@ -9,6 +9,7 @@ import { statsCommand, StatsCommand } from 'bin/commands/stats/models';
 import { swarmCommand, SwarmCommand } from 'bin/commands/swarm/models';
 import { spinCommand, SpinCommand } from 'bin/commands/spin/models';
 import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
+import { sniffCommand, SniffCommand } from 'bin/commands/sniff/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
 import { Logger } from 'lib/utils/logging/logger';
 import { Path, pathOf } from 'lib/utils/files/paths';
@@ -21,7 +22,8 @@ export type AvailableCommands =
   | KillCommand
   | StatsCommand
   | SpinCommand
-  | SyncCommand;
+  | SyncCommand
+  | SniffCommand;
 
 // export const allCommands: [CommandName, Command<unknown>][] = [
 //   analyticsCommand,
@@ -44,6 +46,7 @@ export const COMMANDS: {
   stats: statsCommand,
   spin: spinCommand,
   sync: syncCommand,
+  sniff: sniffCommand,
 };
 
 export async function main(ns: NS) {

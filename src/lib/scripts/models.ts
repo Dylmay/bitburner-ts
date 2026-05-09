@@ -62,6 +62,12 @@ export const INFIL_CRAWLER_CALLABLE: TypedCallableDefinition<void> = {
   scriptPath: pathOf('lib/scripts/infil.ts'),
 };
 
+export type InfilHostArgs = { hostname: string };
+
+export const INFIL_HOST_CALLABLE: TypedCallableDefinition<InfilHostArgs> = {
+  scriptPath: pathOf('lib/scripts/infilHost.ts'),
+};
+
 export const REPORT_CRAWLER_CALLABLE: TypedCallableDefinition<void> = {
   scriptPath: pathOf('lib/scripts/report.ts'),
 };
