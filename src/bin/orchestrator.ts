@@ -1,5 +1,5 @@
 import { spawnCallable } from 'lib/callables/spawn';
-import { guard, tryCast, typeIs } from 'lib/utils/typeGuard';
+import { guard, check, typeIs } from 'lib/utils/typeGuard';
 import { Command } from 'bin/commands/models';
 import { analyticsCommand, AnalyticsCommand } from 'bin/commands/analytics/models';
 import { hackCommand, HackCommand } from 'bin/commands/hack';
@@ -56,7 +56,8 @@ export async function main(ns: NS) {
   const { portOutputPath, remaining: remainingArgs } = extractPortOutputPath(remaining);
 
   const [commandArg, ...rest] = remainingArgs;
-  const commandName = tryCast(commandArg, commandNameGuard);
+  const commandNameResult = check(commandNameGuard, commandArg);
+  const commandName = commandNameResult.ok ? commandNameResult.value : undefined;
 
   log.info(
     'parsed args',

@@ -166,7 +166,7 @@ export function guard<R>(check: (arg: unknown) => CheckResult<R>): Guard<unknown
   };
 }
 
-export function runCheck<T, R extends T>(g: Guard<T, R>, arg: unknown): CheckResult<R> {
+export function check<T, R extends T>(g: Guard<T, R>, arg: unknown): CheckResult<R> {
   return g[GUARD_CHECK](arg);
 }
 
@@ -185,7 +185,7 @@ export function extendGuard<T>(
   shape: Record<string, FieldDef>,
 ): Guard<unknown, T> {
   return guard<T>((arg) => {
-    const baseResult = runCheck(base, arg);
+    const baseResult = check(base, arg);
     if (!baseResult.ok) return baseResult;
     if (!isRecord(arg))
       return { ok: false, failures: [{ path: [], reason: 'expected object' }] };
@@ -252,12 +252,6 @@ export function typeIs<A extends TypeArg, T>(
 
   return matchesConstructor(arg, typeArg);
 }
-
-export const tryCast = <A extends TypeArg, T>(
-  arg: MaybeCompatibleInput<T, ResolveInput<A>>,
-  typeArg: A,
-): (MaybeCompatibleInput<T, ResolveInput<A>> & Resolve<A>) | undefined =>
-  typeIs(arg, typeArg) ? arg : undefined;
 
 function getCheckFailures(value: unknown, typeArg: TypeArg): GuardFailure[] {
   if (isGuardType(typeArg)) {

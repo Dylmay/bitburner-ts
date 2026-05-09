@@ -1,6 +1,6 @@
 import { Logger } from 'lib/utils/logging/logger';
 import { SERVER_INFO_STORE } from 'lib/servers/models';
-import { tryCast, typeIs, objectGuard } from 'lib/utils/typeGuard';
+import { check, typeIs, objectGuard } from 'lib/utils/typeGuard';
 import { execCallableAndWait } from 'lib/callables/execAndWait';
 import { ArgOf, AnyCallableDefinition, CallableOptions } from 'lib/callables/typedCallable';
 import { parseCrawlerJsonArgs, parseJsonArgsCallableOptions } from 'lib/args/jsonArgs';
@@ -169,11 +169,14 @@ class ServerCrawlerBuilder {
     callableToLaunch: TDef,
     args?: ArgOf<TDef>,
   ): ServerCrawler<TDef> {
-    const crawlerArgs = tryCast(parseCrawlerJsonArgs(this.ns), serverCrawlerArgsGuard) ?? {
-      __type: 'serverCrawlerArgs',
-      lockId: crypto.randomUUID(),
-      crawlerKey: this.crawlerKey,
-    };
+    const crawlerArgsResult = check(serverCrawlerArgsGuard, parseCrawlerJsonArgs(this.ns));
+    const crawlerArgs = crawlerArgsResult.ok
+      ? crawlerArgsResult.value
+      : {
+          __type: 'serverCrawlerArgs' as const,
+          lockId: crypto.randomUUID(),
+          crawlerKey: this.crawlerKey,
+        };
 
     if (crawlerArgs.crawlerKey != this.crawlerKey) {
       throw createNiceError(
