@@ -1,4 +1,4 @@
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export const SERVER_INFO_BUILDER_PATH = pathOf('info/builder.server.json');

@@ -5,7 +5,7 @@ import { Logger, LogLevel } from 'lib/utils/logging/logger';
 import { LoggingPort } from 'lib/utils/logging/portLogger';
 import { Port, PortHandle } from 'lib/utils/ports';
 import { Store } from 'lib/stores/store';
-import { Path } from 'lib/utils/paths';
+import { Path } from 'lib/utils/files/paths';
 
 export type AnyCallableDefinition = { readonly scriptPath: Path };
 

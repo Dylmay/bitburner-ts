@@ -1,10 +1,10 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { StoreDef } from 'lib/stores/store';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
-export const LIB_FOLDER = 'lib';
-export const BIN_FOLDER = 'bin';
+export const LIB_FOLDER = pathOf('lib/');
+export const BIN_FOLDER = pathOf('bin/');
 
 export type FileInfo = {
   ramUsage: number | undefined;

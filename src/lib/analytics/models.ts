@@ -1,6 +1,6 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { StoreDef } from 'lib/stores/store';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export type ServerAnalytics = {

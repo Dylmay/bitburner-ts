@@ -11,7 +11,7 @@ import { spinCommand, SpinCommand } from 'bin/commands/spin/models';
 import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
 import { Logger } from 'lib/utils/logging/logger';
-import { Path, pathOf } from 'lib/utils/paths';
+import { Path, pathOf } from 'lib/utils/files/paths';
 
 export type AvailableCommands =
   | AnalyticsCommand

@@ -1,5 +1,5 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 
 export const SET_HOSTNAME_CALLABLE: TypedCallableDefinition<void> = {
   scriptPath: pathOf('lib/servers/steps/setHostname.ts'),

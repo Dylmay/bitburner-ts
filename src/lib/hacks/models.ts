@@ -1,5 +1,5 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { Port } from 'lib/utils/ports';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 

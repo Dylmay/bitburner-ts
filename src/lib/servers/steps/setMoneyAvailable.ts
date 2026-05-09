@@ -1,4 +1,4 @@
-import * as files from 'lib/utils/files';
+import * as files from 'lib/utils/files/files';
 import { typedMain } from 'lib/callables/typedCallable';
 import {
   SERVER_INFO_BUILDER_PATH,

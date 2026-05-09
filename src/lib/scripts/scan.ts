@@ -41,7 +41,6 @@ export const main = typedMain(SCAN_CALLABLE, async ({ ns, log }) => {
       serverToServerInfo[report.host] = report.serverInfo;
     }
 
-    // TODO(dmayor): use structured responses for logging
     let maybeData = loggingPortHandle.read() ?? null;
     while (maybeData != null) {
       log.info('received log message', ['logMessage', maybeData]);

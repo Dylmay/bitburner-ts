@@ -118,7 +118,7 @@ export const main = typedMain(
       const { hacking } = ns.getPlayer().skills;
       const newAction = computeAction(targetInfo);
 
-      if (newAction !== currentAction || hacking - lastSpinLevel >= 50) {
+      if (newAction !== currentAction) {
         log.info(
           'Re-spinning after hacking level gain',
           ['hackingLevel', hacking],

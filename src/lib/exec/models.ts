@@ -1,5 +1,5 @@
 import { AnyCallableDefinition, TypedCallableDefinition } from 'lib/callables/typedCallable';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 
 export type ExecCommand = {
   command: 'exec';

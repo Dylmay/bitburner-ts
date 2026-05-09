@@ -1,4 +1,4 @@
-import { Path } from 'lib/utils/paths';
+import { Path } from 'lib/utils/files/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export type LogArg = [string, unknown];

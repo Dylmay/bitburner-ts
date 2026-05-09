@@ -1,7 +1,7 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { CommandFor } from 'bin/commands/models';
 import { cast } from 'lib/utils/typeGuard';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 
 export type SwarmCommand = { command: 'swarm' };
 

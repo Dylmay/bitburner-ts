@@ -2,7 +2,7 @@ import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { typeIs } from 'lib/utils/typeGuard';
 import { createNiceError } from 'lib/utils/errors';
 import { CommandFor } from 'bin/commands/models';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 
 export type CollectAnalyticsArgs = {
   target: string;

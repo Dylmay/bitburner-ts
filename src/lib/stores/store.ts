@@ -1,5 +1,5 @@
-import * as files from 'lib/utils/files';
-import { Path } from 'lib/utils/paths';
+import * as files from 'lib/utils/files/files';
+import { Path } from 'lib/utils/files/paths';
 import { Guard } from 'lib/utils/typeGuard';
 
 export type StoreDef<T extends object> = {

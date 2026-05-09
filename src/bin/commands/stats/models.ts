@@ -1,6 +1,6 @@
 import { CommandFor } from 'bin/commands/models';
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { cast, guard, typeIs } from 'lib/utils/typeGuard';
 
 type OrderBy = 'growth' | 'moneyAvailable' | 'maxMoney' | 'ramAvailable' | 'perTick';

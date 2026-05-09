@@ -12,7 +12,7 @@ import {
   serverCrawlerArgsGuard,
 } from 'lib/crawler/models';
 import { Store, StoreDef } from 'lib/stores/store';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 
 export type ServerVisitor = ({
   currentHost,

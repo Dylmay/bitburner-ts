@@ -6,7 +6,7 @@ import {
   WEAKEN_SECURITY_CALLABLE,
 } from 'lib/hacks/models';
 import { ServerInfo, serverInfoGuard } from 'lib/servers/models';
-import { pathOf } from 'lib/utils/paths';
+import { pathOf } from 'lib/utils/files/paths';
 import { guard, typeIs } from 'lib/utils/typeGuard';
 
 export type ActionType = 'spin' | 'grow' | 'weaken' | 'hack';
