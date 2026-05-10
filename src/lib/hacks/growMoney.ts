@@ -17,7 +17,7 @@ export const main = typedMain(
     while (true) {
       const growAmount = await ns.grow(target);
 
-      outputPort.write({ type: 'grow', growAmount, hostname: localhost });
+      outputPort.write({ type: 'grow', growAmount, hostname: localhost, target });
 
       log.info('Grown target', ['target', target], ['growAmount', growAmount]);
     }

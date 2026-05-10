@@ -16,7 +16,7 @@ export const main = typedMain(
     while (true) {
       const hackAmount = await ns.hack(target);
 
-      outputPort.write({ type: 'hack', hackAmount, hostname: localhost });
+      outputPort.write({ type: 'hack', hackAmount, hostname: localhost, target });
 
       log.info('Hacked target', ['target', target], ['hackAmount', hackAmount]);
     }

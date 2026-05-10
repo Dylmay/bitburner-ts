@@ -14,10 +14,11 @@ type ServiceDef = {
   name: string;
   callableDefinition: AnyCallableDefinition;
   args?: unknown;
+  ramBuffer?: number;
 };
 
 const SERVICES: ServiceDef[] = [
-  { name: 'sniff', callableDefinition: SNIFF_COMMAND_CALLABLE },
+  { name: 'sniff', callableDefinition: SNIFF_COMMAND_CALLABLE, ramBuffer: 2.0 },
   {
     name: 'swarm',
     callableDefinition: SWARM_COMMAND_CALLABLE,
@@ -54,12 +55,14 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
       throw createNiceError('auto: RAM cost not found in install data', ['service', service.name]);
     }
 
+    const ramWithBuffer = ram + (service.ramBuffer ?? 0);
+
     const host = candidates
       .map((server) => ({
         server,
         available: server.ram - (reservedRam.get(server.hostname) ?? 0),
       }))
-      .filter(({ available }) => available >= ram)
+      .filter(({ available }) => available >= ramWithBuffer)
       .sort((a, b) => a.available - b.available)[0]?.server;
 
     if (!host) {

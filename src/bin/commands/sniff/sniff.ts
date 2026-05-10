@@ -15,7 +15,11 @@ import { scpFile } from 'lib/utils/files/scpFile';
 import { BuilderArgs } from 'lib/servers/steps/models';
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 
-export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
+export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log, localServerInfo }) => {
+  if (!localServerInfo) {
+    throw createNiceError('Unable to get local server info');
+  }
+
   const store = Store.openStore(ns, NETWORK_REPORT_STORE);
   while (true) {
     const report = store.load();
@@ -34,10 +38,15 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
           ns,
           callableDefinition: step,
           args,
-          sleepAmountMs: 5,
+          sleepAmountMs: 100,
         });
         if (!pid) {
-          throw createNiceError('sniff: build step failed', ['hostname', hostname], ['step', step]);
+          throw createNiceError(
+            'sniff: build step failed',
+            ['localhost', localServerInfo.hostname],
+            ['target', hostname],
+            ['step', step],
+          );
         }
       };
 
@@ -69,7 +78,7 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
         to: { path: SERVER_INFO_STORE.location, destinationHost: hostname },
       });
       // would really like not to have this - maybe we ignore tmp instead
-      ns.rm(serverInfoPath.path);
+      // ns.rm(serverInfoPath.path);
 
       if (!serverInfo.unstable.hasRootAccess && curHackLevel >= serverInfo.requiredHackingLevel) {
         log.info('infiltrating', ['hostname', hostname]);

@@ -17,18 +17,21 @@ export type GrowMoneyOutput = {
   type: 'grow';
   growAmount: number;
   hostname: string;
+  target: string;
 };
 
 export type HackMoneyOutput = {
   type: 'hack';
   hackAmount: number;
   hostname: string;
+  target: string;
 };
 
 export type WeakenSecurityOutput = {
   type: 'weaken';
   weakenAmount: number;
   hostname: string;
+  target: string;
 };
 
 export type HackOutput = GrowMoneyOutput | HackMoneyOutput | WeakenSecurityOutput;
@@ -36,6 +39,7 @@ export type HackOutput = GrowMoneyOutput | HackMoneyOutput | WeakenSecurityOutpu
 export const hackOutputGuard = objectGuard<HackOutput>({
   type: 'string',
   hostname: 'string',
+  target: 'string',
 });
 
 export const HACK_OUTPUT_PORT: Port<HackOutput> = {

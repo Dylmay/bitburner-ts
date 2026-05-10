@@ -96,6 +96,10 @@ export const main = typedMain(
         ['strategy', strategy],
       );
 
+      const ownedScriptPaths = new Set(
+        Object.values(ACTION_TYPE_TO_CALLABLE).map(({ scriptPath }) => scriptPath.path),
+      );
+
       const hostToProcess: Record<string, { pid: number; threads: number }> = {};
       let gigsSpent = 0;
       let threadsSpent = 0;
@@ -108,6 +112,12 @@ export const main = typedMain(
         }
         if (!serverInfo.unstable.hasRootAccess) {
           log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
+          continue;
+        }
+
+        const foreignProcess = ns.ps(hostname).find(({ filename }) => !ownedScriptPaths.has(filename));
+        if (foreignProcess) {
+          log.debug('Skipping node — foreign process running', ['hostname', hostname], ['process', foreignProcess.filename]);
           continue;
         }
 
@@ -243,6 +253,7 @@ export const main = typedMain(
           case 'grow': {
             log.debug(
               'Completed grow on node',
+              ['target', data.target],
               ['host', data.hostname],
               ['growAmount', data.growAmount],
             );
@@ -261,6 +272,7 @@ export const main = typedMain(
           case 'weaken':
             log.debug(
               'Completed weaken on node',
+              ['target', data.target],
               ['host', data.hostname],
               ['weakenAmount', data.weakenAmount],
             );
@@ -270,6 +282,7 @@ export const main = typedMain(
           case 'hack': {
             log.debug(
               'Completed hack on node',
+              ['target', data.target],
               ['host', data.hostname],
               ['hackAmount', data.hackAmount],
             );
