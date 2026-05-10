@@ -15,6 +15,7 @@ import { Store } from 'lib/stores/store';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 import { getMoneyPerCycle } from 'lib/functions/getMoneyPerCycle';
+import { Logger } from 'lib/utils/logging/logger';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
@@ -43,19 +44,181 @@ const ACTION_THREAD_CALCULATORS: Partial<Record<ActionType, ThreadRequirementCal
   },
 };
 
+type DeploymentResult = {
+  hostToProcess: Record<string, { pid: number; threads: number }>;
+  gigsSpent: number;
+  threadsSpent: number;
+};
+
+type TargetDeployment = {
+  target: ServerInfo;
+  action: ActionType;
+  result: DeploymentResult;
+};
+
+const resolveThreads = (ns: NS, log: Logger, action: ActionType, target: ServerInfo): number => {
+  const calculator = ACTION_THREAD_CALCULATORS[action];
+  if (calculator) {
+    const total = calculator(ns, target);
+    log.info('Strategy: calculated budget', ['action', action], ['threads', total]);
+    return total;
+  }
+  log.warn('No thread calculator for action, defaulting to 0', ['action', action]);
+  return 0;
+};
+
+const deployAction = (
+  ns: NS,
+  log: Logger,
+  localhost: string,
+  scriptToRamCost: Map<string, number | undefined>,
+  action: ActionType,
+  targetHost: string,
+  report: NetworkReport,
+  strategy: ThreadAllocationStrategy,
+): DeploymentResult => {
+  const callable = ACTION_TYPE_TO_CALLABLE[action];
+
+  // TODO(dmayor): Make the store allow kv pairs
+  const scriptRam = scriptToRamCost.get(callable.scriptPath.path);
+
+  if (scriptRam === undefined) {
+    throw createNiceError('Unable to fetch ram cost', ['scriptPath', callable.scriptPath]);
+  }
+
+  const hackArgs: HackArgs = { target: targetHost };
+
+  log.info(
+    'Deploying action',
+    ['action', action],
+    ['target', targetHost],
+    ['strategy', strategy],
+  );
+
+  const ownedScriptPaths = new Set(
+    Object.values(ACTION_TYPE_TO_CALLABLE).map(({ scriptPath }) => scriptPath.path),
+  );
+
+  const hostToProcess: Record<string, { pid: number; threads: number }> = {};
+  let gigsSpent = 0;
+  let threadsSpent = 0;
+  let remaining = strategy.total;
+
+  const totalRamNeeded = strategy.total * scriptRam;
+  const eligibleServers = Object.entries(report.serverToServerInfo)
+    .filter(([hostname, serverInfo]) => {
+      if (hostname === 'home' || hostname === localhost) return false;
+      if (!serverInfo.unstable.hasRootAccess) {
+        log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
+        return false;
+      }
+      const foreignProcess = ns.ps(hostname).find(({ filename }) => !ownedScriptPaths.has(filename));
+      if (foreignProcess) {
+        log.debug('Skipping node — foreign process running', ['hostname', hostname], ['process', foreignProcess.filename]);
+        return false;
+      }
+      return true;
+    })
+    .map(([hostname, serverInfo]) => ({ hostname, availableRam: serverInfo.ram - ns.getServerUsedRam(hostname) }))
+    .filter(({ availableRam }) => availableRam >= scriptRam)
+    .sort((a, b) => {
+      const aFits = a.availableRam >= totalRamNeeded;
+      const bFits = b.availableRam >= totalRamNeeded;
+      if (aFits && bFits) return a.availableRam - b.availableRam; // best fit: smallest that holds all
+      if (aFits !== bFits) return aFits ? -1 : 1;                 // servers that fit come first
+      return b.availableRam - a.availableRam;                     // FFD for overflow remainder
+    });
+
+  for (const { hostname, availableRam } of eligibleServers) {
+    if (remaining <= 0) break;
+
+    const maxThreads = Math.floor(availableRam / scriptRam);
+    const threads = Math.min(maxThreads, remaining);
+
+    remaining -= threads;
+    threadsSpent += threads;
+    gigsSpent += scriptRam * threads;
+
+    const pid = execCallable({
+      ns,
+      hostname,
+      callableDefinition: callable,
+      runOptions: { threads },
+      args: hackArgs,
+    });
+
+    if (pid !== undefined) {
+      hostToProcess[hostname] = { pid, threads };
+      log.debug(
+        'Assigned threads to host',
+        ['hostname', hostname],
+        ['threads', threads],
+        ['pid', pid],
+      );
+    } else {
+      log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
+    }
+  }
+
+  log.info(
+    'Deployment complete',
+    ['action', action],
+    ['hosts', Object.keys(hostToProcess).length],
+    ['threadsSpent', threadsSpent],
+    ['gigsSpent', gigsSpent],
+  );
+
+  return { hostToProcess, threadsSpent, gigsSpent };
+};
+
+const killDeployments = (ns: NS, deployments: TargetDeployment[]): void => {
+  for (const { result } of deployments) {
+    for (const { pid } of Object.values(result.hostToProcess)) {
+      ns.kill(pid);
+    }
+  }
+};
+
+const getStaleDeployments = (targets: ServerInfo[], current: TargetDeployment[]): TargetDeployment[] => {
+  const targetByHost = new Map(targets.map(t => [t.hostname, t]));
+
+  return current.filter(({ target: deployed, action: deployedAction }) => {
+    const fresh = targetByHost.get(deployed.hostname);
+    return !fresh || computeAction(fresh) !== deployedAction;
+  });
+};
+
+const buildDesiredDeployments = (
+  ns: NS,
+  log: Logger,
+  localhost: string,
+  scriptToRamCost: Map<string, number | undefined>,
+  targets: ServerInfo[],
+  report: NetworkReport,
+): TargetDeployment[] => {
+  const deployments: TargetDeployment[] = [];
+
+  for (const target of targets) {
+    const action = computeAction(target);
+    const total = resolveThreads(ns, log, action, target);
+    if (total === 0) continue;
+
+    const strategy: ThreadAllocationStrategy = { kind: 'budget', total };
+    const result = deployAction(ns, log, localhost, scriptToRamCost, action, target.hostname, report, strategy);
+    if (result.threadsSpent === 0) break;
+
+    deployments.push({ target, action, result });
+  }
+
+  return deployments;
+};
+
 export const main = typedMain(
   SWARM_COMMAND_CALLABLE,
   async ({ ns, log, localServerInfo }, args) => {
-    // Returns a fresh NetworkReport loaded after sync completes — callers never touch a stale report.
     if (!localServerInfo) {
       throw createNiceError('No local server info. Unable to start swarm');
     }
-    // next goals:
-    // 1. figure out the total amount of ram we have available on the network
-    // 2. figure out how many threads exactly keeps us in a stable state as close to 100% as possible
-    // 3. focus on the max feasible node first, remove threads from nodes that are no longer generating the same level of income
-    // 4. have a min $ per second for threads
-    // 5. Use max threads to grow and weaken nodes to reach 100%, before leaving a skeleton crew
 
     const hackListenerPort = PortHandle.connectToPort(ns, HACK_OUTPUT_PORT);
     hackListenerPort.clearPort();
@@ -70,176 +233,30 @@ export const main = typedMain(
       ),
     );
 
-    const deployAction = (
-      action: ActionType,
-      targetHost: string,
-      report: NetworkReport,
-      strategy: ThreadAllocationStrategy,
-    ): {
-      hostToProcess: Record<string, { pid: number; threads: number }>;
-      gigsSpent: number;
-      threadsSpent: number;
-    } => {
-      const callable = ACTION_TYPE_TO_CALLABLE[action];
-
-      // TODO(dmayor): Make the store allow kv pairs
-      const scriptRam = scriptToRamCost.get(callable.scriptPath.path);
-
-      if (scriptRam === undefined) {
-        throw createNiceError('Unable to fetch ram cost', ['scriptPath', callable.scriptPath]);
-      }
-
-      const args: HackArgs = { target: targetHost };
-
-      log.info(
-        'Deploying action',
-        ['action', action],
-        ['target', targetHost],
-        ['strategy', strategy],
-      );
-
-      const ownedScriptPaths = new Set(
-        Object.values(ACTION_TYPE_TO_CALLABLE).map(({ scriptPath }) => scriptPath.path),
-      );
-
-      const hostToProcess: Record<string, { pid: number; threads: number }> = {};
-      let gigsSpent = 0;
-      let threadsSpent = 0;
-      let remaining = strategy.total;
-
-      const totalRamNeeded = strategy.total * scriptRam;
-      const eligibleServers = Object.entries(report.serverToServerInfo)
-        .filter(([hostname, serverInfo]) => {
-          if (hostname === 'home' || hostname === localhost) return false;
-          if (!serverInfo.unstable.hasRootAccess) {
-            log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
-            return false;
-          }
-          const foreignProcess = ns.ps(hostname).find(({ filename }) => !ownedScriptPaths.has(filename));
-          if (foreignProcess) {
-            log.debug('Skipping node — foreign process running', ['hostname', hostname], ['process', foreignProcess.filename]);
-            return false;
-          }
-          return true;
-        })
-        .map(([hostname, serverInfo]) => ({ hostname, availableRam: serverInfo.ram - ns.getServerUsedRam(hostname) }))
-        .filter(({ availableRam }) => availableRam >= scriptRam)
-        .sort((a, b) => {
-          const aFits = a.availableRam >= totalRamNeeded;
-          const bFits = b.availableRam >= totalRamNeeded;
-          if (aFits && bFits) return a.availableRam - b.availableRam; // best fit: smallest that holds all
-          if (aFits !== bFits) return aFits ? -1 : 1;                 // servers that fit come first
-          return b.availableRam - a.availableRam;                     // FFD for overflow remainder
-        });
-
-      for (const { hostname, availableRam } of eligibleServers) {
-        if (remaining <= 0) break;
-
-        const maxThreads = Math.floor(availableRam / scriptRam);
-        const threads = Math.min(maxThreads, remaining);
-
-        remaining -= threads;
-        threadsSpent += threads;
-        gigsSpent += scriptRam * threads;
-
-        const pid = execCallable({
-          ns,
-          hostname,
-          callableDefinition: callable,
-          runOptions: { threads },
-          args,
-        });
-
-        if (pid !== undefined) {
-          hostToProcess[hostname] = { pid, threads };
-          log.debug(
-            'Assigned threads to host',
-            ['hostname', hostname],
-            ['threads', threads],
-            ['pid', pid],
-          );
-        } else {
-          log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
-        }
-      }
-
-      log.info(
-        'Deployment complete',
-        ['action', action],
-        ['hosts', Object.keys(hostToProcess).length],
-        ['threadsSpent', threadsSpent],
-        ['gigsSpent', gigsSpent],
-      );
-
-      return {
-        hostToProcess,
-        threadsSpent,
-        gigsSpent,
-      };
-    };
-
     log.info('Starting swarm');
 
-    const resolveThreads = (action: ActionType, target: ServerInfo): number => {
-      if (args?.threads !== undefined) {
-        log.info('Strategy: manual override', ['action', action], ['threads', args.threads]);
-        return args.threads;
-      }
-      const calculator = ACTION_THREAD_CALCULATORS[action];
-      if (calculator) {
-        const total = calculator(ns, target);
-        log.info('Strategy: calculated budget', ['action', action], ['threads', total]);
-        return total;
-      }
-      log.warn('No thread calculator for action, defaulting to 0', ['action', action]);
-      return 0;
-    };
-
-    let currentAction: ActionType | undefined = undefined;
-    let allDeployInfos: { target: ServerInfo; info: ReturnType<typeof deployAction> }[] = [];
+    let allDeployments: TargetDeployment[] = [];
 
     while (true) {
-      const runningReport = networkReportStore.load();
-      const targets = selectTargets(ns, runningReport);
-      const primaryTarget = targets[0]!;
-      const newAction = args?.action ?? computeAction(primaryTarget);
+      const report = networkReportStore.load();
+      const targets = selectTargets(ns, report);
 
-      if (newAction !== currentAction) {
-        const { hacking } = ns.getPlayer().skills;
-        log.info(
-          'Re-spinning after action change',
-          ['hackingLevel', hacking],
-          ['previousAction', currentAction],
-          ['newAction', newAction],
-        );
-        currentAction = newAction;
-
-        for (const { info } of allDeployInfos) {
-          for (const { pid } of Object.values(info.hostToProcess)) {
-            ns.kill(pid);
-          }
-        }
-
-        allDeployInfos = [];
-        for (const target of targets) {
-          const total = resolveThreads(currentAction, target);
-          if (total === 0) continue;
-          const strategy: ThreadAllocationStrategy = { kind: 'budget', total };
-          const info = deployAction(currentAction, target.hostname, runningReport, strategy);
-          if (info.threadsSpent === 0) break;
-          allDeployInfos.push({ target, info });
-        }
+      if (hasDeploymentsChanged(targets, allDeployments)) {
+        log.info('Re-spinning after deployment change', ['hackingLevel', ns.getPlayer().skills.hacking]);
+        killAllDeployments(ns, allDeployments);
+        allDeployments = buildDesiredDeployments(ns, log, localhost, scriptToRamCost, targets, report);
       } else {
-        for (const { target, info } of allDeployInfos) {
+        for (const { target, action, result } of allDeployments) {
+          const freshInfo = report.serverToServerInfo[target.hostname];
           log.info(
-            'Action unchanged',
-            ['action', currentAction],
+            'Deployments unchanged',
+            ['action', action],
             ['target', target.hostname],
-            ['threadsAssigned', info.threadsSpent],
-            ['hosts', Object.keys(info.hostToProcess).length],
-            ['securityLevel', target.unstable.securityLevel],
+            ['threadsAssigned', result.threadsSpent],
+            ['hosts', Object.keys(result.hostToProcess).length],
+            ['securityLevel', freshInfo?.unstable.securityLevel ?? target.unstable.securityLevel],
             ['minSecurityLevel', target.minSecurityLevel],
-            ['moneyAvailable', target.unstable.moneyAvailable],
+            ['moneyAvailable', freshInfo?.unstable.moneyAvailable ?? target.unstable.moneyAvailable],
             ['maxMoney', target.maxMoney],
           );
         }
@@ -262,16 +279,6 @@ export const main = typedMain(
               ['host', data.hostname],
               ['growAmount', data.growAmount],
             );
-            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.moneyAvailable *=
-            //   data.growAmount;
-
-            // const securityGrow = ns.growthAnalyzeSecurity(
-            //   deployInfo.hostToProcess[data.hostname]!.threads,
-            //   primaryTarget.hostname,
-            // );
-
-            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel +=
-            //   securityGrow;
             break;
           }
           case 'weaken':
@@ -281,8 +288,6 @@ export const main = typedMain(
               ['host', data.hostname],
               ['weakenAmount', data.weakenAmount],
             );
-            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel -=
-            //   data.weakenAmount;
             break;
           case 'hack': {
             log.debug(
@@ -291,16 +296,6 @@ export const main = typedMain(
               ['host', data.hostname],
               ['hackAmount', data.hackAmount],
             );
-            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.moneyAvailable -=
-            //   data.hackAmount;
-
-            // const securityHackGrow = ns.hackAnalyzeSecurity(
-            //   deployInfo.hostToProcess[data.hostname]!.threads,
-            //   primaryTarget.hostname,
-            // );
-
-            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel +=
-            //   securityHackGrow;
             break;
           }
           default: {
@@ -310,8 +305,8 @@ export const main = typedMain(
         }
 
         if (!args?.managed) {
-          networkReportStore.write(runningReport);
-          for (const host of Object.keys(runningReport.serverToServerInfo)) {
+          networkReportStore.write(report);
+          for (const host of Object.keys(report.serverToServerInfo)) {
             ns.scp(NETWORK_REPORT_STORE.location.path, host);
           }
         }
@@ -319,7 +314,7 @@ export const main = typedMain(
         await ns.sleep(100);
       }
 
-      log.trace('Sleeping for 60 seconds');
+      log.trace('Sleeping for 15 seconds');
       await ns.sleep(15_000);
     }
   },
