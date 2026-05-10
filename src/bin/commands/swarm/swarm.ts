@@ -70,6 +70,11 @@ export const main = typedMain(
         if (hostname === 'home' || hostname === localhost) {
           continue;
         }
+        if (!serverInfo.unstable.hasRootAccess) {
+          log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
+          continue;
+        }
+
         const threads = Math.floor(serverInfo.ram / scriptRam);
 
         threadsSpent += threads;
@@ -201,7 +206,12 @@ export const main = typedMain(
             throw createNiceError('Unknown data type', ['data', neverData]);
           }
         }
-        networkReportStore.write(runningReport);
+        if (!args?.managed) {
+          networkReportStore.write(runningReport);
+          for (const host of Object.keys(runningReport.serverToServerInfo)) {
+            ns.scp(NETWORK_REPORT_STORE.location.path, host);
+          }
+        }
 
         await ns.sleep(100);
       }

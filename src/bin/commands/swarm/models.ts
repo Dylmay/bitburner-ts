@@ -7,6 +7,7 @@ export type SwarmCommand = { command: 'swarm' };
 
 export type SwarmArgs = {
   target: string | undefined;
+  managed: boolean | undefined;
 };
 
 export const SWARM_COMMAND_CALLABLE: TypedCallableDefinition<SwarmArgs> = {
@@ -17,5 +18,5 @@ export const swarmCommand: CommandFor<typeof SWARM_COMMAND_CALLABLE> & SwarmComm
   command: 'swarm',
   description: 'Swarm the best hackable target with all servers using coordinated phase-switching',
   definition: SWARM_COMMAND_CALLABLE,
-  parseArgs: ([target]) => ({ target: target ? cast(target, 'string') : undefined }),
+  parseArgs: ([target]) => ({ target: target ? cast(target, 'string') : undefined, managed: undefined }),
 };
