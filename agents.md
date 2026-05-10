@@ -162,6 +162,13 @@ Log levels: `TRACE < DEBUG < INFO < WARN < ERROR`. Consumers: `ns.print`, file, 
 
 ---
 
+## Code Style
+
+- **Always use braces for if statements** — no single-line `if (x) return y;`. Every branch must have a `{}` block.
+- **Space is a virtue** — add blank lines between logical sections within functions, between statements that represent distinct steps, and after variable declaration groups. Err on the side of more whitespace.
+
+---
+
 ## File Conventions
 
 - `src/bin/` — orchestrator and top-level bin scripts
