@@ -4,11 +4,10 @@ import { NETWORK_REPORT_STORE } from 'lib/reports/models';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { SNIFF_COMMAND_CALLABLE } from 'bin/commands/sniff/models';
 import { SWARM_COMMAND_CALLABLE } from 'bin/commands/swarm/models';
-import { DEPLOY_COMMAND_CALLABLE } from 'bin/commands/deploy/models';
+import { CONTRACT_SCAN_CALLABLE } from 'bin/commands/contract/models';
 import { execCallable } from 'lib/callables/exec';
 import { Store } from 'lib/stores/store';
 import { createNiceError } from 'lib/utils/errors';
-import { spawnCallable } from 'lib/callables/spawn';
 import { RamReservation } from 'lib/servers/ramReservation';
 
 type ServiceDef = {
@@ -25,6 +24,7 @@ const SERVICES: ServiceDef[] = [
     callableDefinition: SWARM_COMMAND_CALLABLE,
     args: { target: undefined, managed: true },
   },
+  { name: 'contract-scan', callableDefinition: CONTRACT_SCAN_CALLABLE, ramBuffer: 6.0 },
 ];
 
 export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
@@ -91,10 +91,4 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
       );
     }
   }
-
-  spawnCallable({
-    ns,
-    callableDefinition: DEPLOY_COMMAND_CALLABLE,
-    args: { managed: 'managed' },
-  });
 });

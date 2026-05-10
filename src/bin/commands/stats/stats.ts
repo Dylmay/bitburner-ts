@@ -19,6 +19,7 @@ type ServerReport = {
   requiredHackingLevel: number;
   ip: string | undefined; // TODO(dmayor): either drop ip again or make it so we can set it from another node
   unstableServerMetrics: UnstableServerMetrics;
+  connectableServers: string[];
 };
 
 export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
@@ -43,6 +44,8 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
           return serverInfoA.ram - serverInfoB.ram;
         case 'perTick':
           return getMaxMoneyPerTick(ns, serverInfoA) - getMaxMoneyPerTick(ns, serverInfoB);
+        case 'name':
+          return serverInfoB.hostname.localeCompare(serverInfoA.hostname);
         default: {
           const cannotOrderBy: never = orderBy;
           throw createNiceError('Unsupported ordering', ['orderBy', cannotOrderBy]);
@@ -66,6 +69,7 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
       growthLevel: serverInfo.growthLevel,
       ip: serverInfo.ip,
       requiredHackingLevel: serverInfo.requiredHackingLevel,
+      connectableServers: serverInfo.connectableServers,
     };
 
     return [serverName, serverReport];
@@ -84,4 +88,3 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
 
   ns.alert(`Reports ordered by ${orderBy}\n` + stringifiedReports);
 });
-

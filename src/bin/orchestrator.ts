@@ -13,6 +13,8 @@ import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
 import { sniffCommand, SniffCommand } from 'bin/commands/sniff/models';
 import { autoCommand, AutoCommand } from 'bin/commands/auto/models';
 import { deployCommand, DeployCommand } from 'bin/commands/deploy/models';
+import { filesCommand, FilesCommand } from 'bin/commands/files/models';
+import { contractCommand, ContractCommand } from 'bin/commands/contract/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
 import { Logger } from 'lib/utils/logging/logger';
 import { Path, pathOf } from 'lib/utils/files/paths';
@@ -28,7 +30,9 @@ export type AvailableCommands =
   | SyncCommand
   | SniffCommand
   | AutoCommand
-  | DeployCommand;
+  | DeployCommand
+  | FilesCommand
+  | ContractCommand;
 
 // export const allCommands: [CommandName, Command<unknown>][] = [
 //   analyticsCommand,
@@ -54,6 +58,8 @@ export const COMMANDS: {
   sniff: sniffCommand,
   auto: autoCommand,
   deploy: deployCommand,
+  files: filesCommand,
+  contract: contractCommand,
 };
 
 export async function main(ns: NS) {

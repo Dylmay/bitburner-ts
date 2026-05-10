@@ -4,17 +4,27 @@ import { pathOf } from 'lib/utils/files/paths';
 import { cast, enumGuard } from 'lib/utils/typeGuard';
 import { flag, parseFlags } from 'lib/utils/flags';
 
-type OrderBy = 'growth' | 'moneyAvailable' | 'maxMoney' | 'ramAvailable' | 'perTick';
+type OrderBy = 'growth' | 'moneyAvailable' | 'maxMoney' | 'ramAvailable' | 'perTick' | 'name';
 
 type StatsArgs = {
   orderBy: OrderBy;
   onlyRoot: boolean;
 };
 
-const orderByGuard = enumGuard<OrderBy>(['growth', 'moneyAvailable', 'maxMoney', 'ramAvailable', 'perTick']);
+const orderByGuard = enumGuard<OrderBy>([
+  'growth',
+  'moneyAvailable',
+  'maxMoney',
+  'ramAvailable',
+  'perTick',
+  'name',
+]);
 
 const statsFlags = {
-  orderBy: flag.string({ default: 'maxMoney', desc: 'Sort results by (growth|moneyAvailable|maxMoney|ramAvailable|perTick)' }),
+  orderBy: flag.string({
+    default: 'maxMoney',
+    desc: 'Sort results by (growth|moneyAvailable|maxMoney|ramAvailable|perTick)',
+  }),
   onlyRoot: flag.boolean({ desc: 'Only show root-accessible servers' }),
 } as const;
 
