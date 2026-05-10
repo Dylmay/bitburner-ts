@@ -1,5 +1,9 @@
 import { typedMain } from 'lib/callables/typedCallable';
-import { SWARM_COMMAND_CALLABLE, ThreadAllocationStrategy } from 'bin/commands/swarm/models';
+import {
+  SWARM_COMMAND_CALLABLE,
+  ThreadAllocationStrategy,
+  ThreadRequirementCalculator,
+} from 'bin/commands/swarm/models';
 import { ActionType, ACTION_TYPE_TO_CALLABLE } from 'lib/scripts/models';
 import { execCallable } from 'lib/callables/exec';
 import { HACK_OUTPUT_PORT, HackArgs } from 'lib/hacks/models';
@@ -13,6 +17,29 @@ import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
+
+const ACTION_THREAD_CALCULATORS: Partial<Record<ActionType, ThreadRequirementCalculator>> = {
+  grow: (ns, target) => {
+    const { moneyAvailable } = target.unstable;
+    if (moneyAvailable <= 0 || moneyAvailable >= target.maxMoney) return 0;
+    const multiplier = target.maxMoney / moneyAvailable;
+    return Math.ceil(ns.growthAnalyze(target.hostname, multiplier));
+  },
+  weaken: (ns, target) => {
+    const excess = target.unstable.securityLevel - target.minSecurityLevel;
+    if (excess <= 0) return 0;
+    return Math.ceil(excess / ns.weakenAnalyze(1));
+  },
+  hack: (ns, target) => {
+    const { moneyAvailable } = target.unstable;
+    const floor = MIN_MONEY_PERCENTAGE * target.maxMoney;
+    if (moneyAvailable <= floor) return 0;
+    const stealFraction = (moneyAvailable - floor) / moneyAvailable;
+    const perThread = ns.hackAnalyze(target.hostname);
+    if (perThread <= 0) return 0;
+    return Math.ceil(stealFraction / perThread);
+  },
+};
 
 export const main = typedMain(
   SWARM_COMMAND_CALLABLE,
@@ -62,7 +89,12 @@ export const main = typedMain(
 
       const args: HackArgs = { target: targetHost };
 
-      log.info('Deploying action', ['action', action], ['target', targetHost], ['strategy', strategy]);
+      log.info(
+        'Deploying action',
+        ['action', action],
+        ['target', targetHost],
+        ['strategy', strategy],
+      );
 
       const hostToProcess: Record<string, { pid: number; threads: number }> = {};
       let gigsSpent = 0;
@@ -83,8 +115,8 @@ export const main = typedMain(
           break;
         }
 
-        // ram should never be undefined but a failure was spotted...
-        const maxThreads = Math.floor(serverInfo.ram / scriptRam) ?? 0;
+        const availableRam = serverInfo.ram - ns.getServerUsedRam(hostname);
+        const maxThreads = Math.floor(availableRam / scriptRam);
         const threads = strategy.kind === 'budget' ? Math.min(maxThreads, remaining) : maxThreads;
 
         remaining -= threads;
@@ -104,14 +136,25 @@ export const main = typedMain(
         });
 
         if (pid !== undefined) {
-          hostToProcess[hostname] = {
-            pid,
-            threads,
-          };
+          hostToProcess[hostname] = { pid, threads };
+          log.debug(
+            'Assigned threads to host',
+            ['hostname', hostname],
+            ['threads', threads],
+            ['pid', pid],
+          );
         } else {
           log.warn('Unable to start callable', ['targetHost', hostname], ['callable', callable]);
         }
       }
+
+      log.info(
+        'Deployment complete',
+        ['action', action],
+        ['hosts', Object.keys(hostToProcess).length],
+        ['threadsSpent', threadsSpent],
+        ['gigsSpent', gigsSpent],
+      );
 
       return {
         hostToProcess,
@@ -121,9 +164,21 @@ export const main = typedMain(
     };
 
     log.info('Starting swarm');
-    const strategy: ThreadAllocationStrategy = args?.threads
-      ? { kind: 'budget', total: args.threads }
-      : { kind: 'fill' };
+
+    const resolveStrategy = (action: ActionType, target: ServerInfo): ThreadAllocationStrategy => {
+      if (args?.threads !== undefined) {
+        log.info('Strategy: manual override', ['action', action], ['threads', args.threads]);
+        return { kind: 'budget', total: args.threads };
+      }
+      const calculator = ACTION_THREAD_CALCULATORS[action];
+      if (calculator) {
+        const total = calculator(ns, target);
+        log.info('Strategy: calculated budget', ['action', action], ['threads', total]);
+        return { kind: 'budget', total };
+      }
+      log.info('Strategy: fill all RAM', ['action', action]);
+      return { kind: 'fill' };
+    };
 
     let currentAction: ActionType | undefined = undefined;
     let deployInfo: ReturnType<typeof deployAction> = {
@@ -154,7 +209,12 @@ export const main = typedMain(
           ns.kill(pid);
         }
 
-        deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport, strategy);
+        deployInfo = deployAction(
+          currentAction,
+          targetInfo.hostname,
+          runningReport,
+          resolveStrategy(currentAction, targetInfo),
+        );
       } else {
         log.info(
           'Action unchanged',

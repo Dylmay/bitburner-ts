@@ -3,12 +3,15 @@ import { CommandFor } from 'bin/commands/models';
 import { cast } from 'lib/utils/typeGuard';
 import { pathOf } from 'lib/utils/files/paths';
 import { ActionType } from 'lib/scripts/models';
+import { ServerInfo } from 'lib/servers/models';
 
 export type SwarmCommand = { command: 'swarm' };
 
 export type ThreadAllocationStrategy =
   | { kind: 'fill' }
   | { kind: 'budget'; total: number };
+
+export type ThreadRequirementCalculator = (ns: NS, target: ServerInfo) => number;
 
 export type SwarmArgs = {
   target: string | undefined;
