@@ -6,6 +6,7 @@ import {
 } from 'lib/servers/serverInfoBuilder';
 import { SET_FILES_CALLABLE } from 'lib/servers/steps/models';
 
+const IGNORED_FILE_STRINGS = ['tmp', 'lib', 'bin', 'server.json'];
 export const main = typedMain(SET_FILES_CALLABLE, async ({ ns }, args) => {
   const builderPath = args?.outputPath ?? SERVER_INFO_BUILDER_PATH;
 
@@ -13,7 +14,12 @@ export const main = typedMain(SET_FILES_CALLABLE, async ({ ns }, args) => {
   files.writeJson(ns, builderPath, {
     ...builder,
     unstable: {
-      files: ns.ls(builder.hostname),
+      files: ns
+        .ls(builder.hostname)
+        .filter(
+          (filename) =>
+            IGNORED_FILE_STRINGS.find((fileString) => filename.includes(fileString)) === undefined,
+        ),
     },
   });
 });

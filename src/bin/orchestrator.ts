@@ -1,5 +1,6 @@
 import { spawnCallable } from 'lib/callables/spawn';
-import { guard, check, typeIs } from 'lib/utils/typeGuard';
+import { enumGuard, check, typeIs } from 'lib/utils/typeGuard';
+import { flagsHelp } from 'lib/utils/flags';
 import { Command } from 'bin/commands/models';
 import { analyticsCommand, AnalyticsCommand } from 'bin/commands/analytics/models';
 import { hackCommand, HackCommand } from 'bin/commands/hack';
@@ -11,6 +12,7 @@ import { spinCommand, SpinCommand } from 'bin/commands/spin/models';
 import { syncCommand, SyncCommand } from 'bin/commands/sync/models';
 import { sniffCommand, SniffCommand } from 'bin/commands/sniff/models';
 import { autoCommand, AutoCommand } from 'bin/commands/auto/models';
+import { deployCommand, DeployCommand } from 'bin/commands/deploy/models';
 import { EXEC_CALLABLE, ExecArgs } from 'lib/exec/models';
 import { Logger } from 'lib/utils/logging/logger';
 import { Path, pathOf } from 'lib/utils/files/paths';
@@ -25,7 +27,8 @@ export type AvailableCommands =
   | SpinCommand
   | SyncCommand
   | SniffCommand
-  | AutoCommand;
+  | AutoCommand
+  | DeployCommand;
 
 // export const allCommands: [CommandName, Command<unknown>][] = [
 //   analyticsCommand,
@@ -50,6 +53,7 @@ export const COMMANDS: {
   sync: syncCommand,
   sniff: sniffCommand,
   auto: autoCommand,
+  deploy: deployCommand,
 };
 
 export async function main(ns: NS) {
@@ -123,20 +127,18 @@ const extractPortOutputPath = (
 };
 
 const printHelp = (ns: NS) => {
-  const lines = (Object.entries(COMMANDS) as [string, { description: string }][])
-    .map(([name, def]) => `  ${name.padEnd(8)} ${def.description}`)
+  const lines = Object.values(COMMANDS)
+    .map((def) => {
+      const header = `  ${def.command.padEnd(8)} ${def.description}`;
+      return def.flags ? `${header}\n${flagsHelp(def.flags)}` : header;
+    })
     .join('\n');
   ns.alert(`Orchestrator Help:\nCommands:\n${lines}`);
 };
 
-type CommandName = Command<never, never>['command'];
+type CommandName = AvailableCommands['command'];
 
-const commandNameGuard = guard<CommandName | 'help'>((cmd) => {
-  if (!typeIs(cmd, 'string')) {
-    return { ok: false, failures: [{ path: [], reason: `expected string, got ${typeof cmd}` }] };
-  }
-
-  return cmd === 'help' || Object.keys(COMMANDS).includes(cmd)
-    ? { ok: true, value: cmd }
-    : { ok: false, failures: [{ path: [], reason: `"${cmd}" is not a valid command` }] };
-});
+const commandNameGuard = enumGuard<CommandName | 'help'>([
+  ...(Object.keys(COMMANDS) as CommandName[]),
+  'help',
+]);

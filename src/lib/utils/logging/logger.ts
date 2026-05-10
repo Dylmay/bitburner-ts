@@ -11,6 +11,7 @@ export type StructuredLogMessage = {
   context: LogArg[];
   scriptName: string;
   logLevel: LogLevel;
+  time: Date;
 };
 
 export const structuredLogMessageGuard = objectGuard<StructuredLogMessage>({
@@ -57,14 +58,21 @@ export const logLevelToLogLevelString = (logLevel: LogLevel): LogLevelString => 
 };
 const createDefaultLogConsumer =
   (ns: NS) =>
-  ({ logLevel, args, message, context, scriptName }: StructuredLogMessage) => {
+  ({ logLevel, time, args, message, context, scriptName }: StructuredLogMessage) => {
     args.unshift(['scriptName', scriptName]);
 
     const argsToPrint = [...context, ...args]
-      .map(([argName, argValue]) => ' |-{' + argName + ': ' + JSON.stringify(argValue) + '}')
+      .map(([argName, argValue]) => '   |-{' + argName + ': ' + JSON.stringify(argValue) + '}')
       .reduce((a, b) => a + '\n' + b, '');
 
-    const stringifiedMessage = logLevelToLogLevelString(logLevel) + ': ' + message + argsToPrint;
+    const stringifiedMessage =
+      logLevelToLogLevelString(logLevel) +
+      ': [' +
+      time.toUTCString() +
+      ']\n' +
+      '  ' +
+      message +
+      argsToPrint;
     ns.print(stringifiedMessage);
   };
 
@@ -132,6 +140,7 @@ export class Logger {
       args,
       context: this.loggingContext,
       scriptName: this.scriptName,
+      time: new Date(),
     };
 
     this.logConsumers.forEach((consumer) => consumer(structuredLogMessage));

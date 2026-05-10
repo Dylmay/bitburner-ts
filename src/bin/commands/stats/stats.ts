@@ -27,8 +27,10 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
   const { serverToServerInfo } = networkReportStore.load();
 
   const orderBy = args?.orderBy ?? 'growth';
+  const onlyRoot = args?.onlyRoot ?? false;
 
   const orderedEntries = Object.entries(serverToServerInfo)
+    .filter(([, serverInfo]) => !onlyRoot || serverInfo.unstable.hasRootAccess)
     .sort(([_serverNameA, serverInfoA], [_serverNameB, serverInfoB]) => {
       switch (orderBy) {
         case 'growth':

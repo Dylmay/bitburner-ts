@@ -8,6 +8,7 @@ import { SNIFF_COMMAND_CALLABLE } from 'bin/commands/sniff/models';
 import { INFIL_HOST_CALLABLE } from 'lib/scripts/models';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { SERVER_INFO_STORE } from 'lib/servers/models';
+import { scpFile } from 'lib/utils/files/scpFile';
 
 export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
   const store = Store.openStore(ns, NETWORK_REPORT_STORE);
@@ -42,8 +43,11 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
 
       report.serverToServerInfo[hostname] = serverInfo;
 
-      ns.scp(serverInfoPath.path, hostname);
-      ns.mv(hostname, serverInfoPath.path, SERVER_INFO_STORE.location.path);
+      scpFile({
+        ns,
+        at: { path: serverInfoPath },
+        to: { path: SERVER_INFO_STORE.location, destinationHost: hostname },
+      });
       // would really like not to have this - maybe we ignore tmp instead
       ns.rm(serverInfoPath.path);
 
@@ -66,18 +70,16 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
       if (!report.allServers.includes(hostname)) {
         report.allServers.push(hostname);
       }
-      log.info('set up server', ['hostname', ['hasRootAccess', serverInfo.unstable.hasRootAccess]]);
+      log.info(
+        'configured server',
+        ['hostname', serverInfo.hostname],
+        ['hasRootAccess', serverInfo.unstable.hasRootAccess],
+      );
     }
 
     report.serversNotVisited = report.allServers.filter(
       (hostname) => !(hostname in report.serverToServerInfo),
     );
-
-    log.info('Refreshing install data from home');
-    const saveLibPid = await runCallableAndWait({ ns, callableDefinition: SAVE_LIB_CALLABLE });
-    if (!saveLibPid) {
-      throw createNiceError('sniff: failed to run save-lib');
-    }
 
     log.info('Updating reports');
     store.write(report);

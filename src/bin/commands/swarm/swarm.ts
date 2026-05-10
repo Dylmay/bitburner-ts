@@ -75,7 +75,8 @@ export const main = typedMain(
           continue;
         }
 
-        const threads = Math.floor(serverInfo.ram / scriptRam);
+        // ram should never be undefined but a failure was spotted...
+        const threads = Math.floor(serverInfo.ram / scriptRam) ?? 0;
 
         threadsSpent += threads;
         gigsSpent += scriptRam * threads;
@@ -109,10 +110,8 @@ export const main = typedMain(
       };
     };
 
-    let lastSpinLevel = ns.getPlayer().skills.hacking;
-
     log.info('Starting swarm');
-    const runningReport = networkReportStore.load();
+    let runningReport = networkReportStore.load();
     let targetInfo = args?.target
       ? runningReport.serverToServerInfo[args.target]!
       : selectBestTarget(ns, runningReport);
@@ -125,11 +124,11 @@ export const main = typedMain(
 
       if (newAction !== currentAction) {
         log.info(
-          'Re-spinning after hacking level gain',
+          'Re-spinning after action change',
           ['hackingLevel', hacking],
-          ['lastSpinLevel', lastSpinLevel],
+          ['previousAction', currentAction],
+          ['newAction', newAction],
         );
-        lastSpinLevel = hacking;
         // report = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
         targetInfo = args?.target
           ? runningReport.serverToServerInfo[args.target]!
@@ -154,51 +153,51 @@ export const main = typedMain(
         log.debug('Hacker has completed cycle', ['cycle', data]);
         switch (data.type) {
           case 'grow': {
-            log.info(
+            log.debug(
               'Completed grow on node',
               ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['growAmount', data.growAmount],
             );
-            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
-              data.growAmount;
+            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
+            //   data.growAmount;
 
-            const securityGrow = ns.growthAnalyzeSecurity(
-              deployInfo.hostToProcess[data.hostname]!.threads,
-              targetInfo.hostname,
-            );
+            // const securityGrow = ns.growthAnalyzeSecurity(
+            //   deployInfo.hostToProcess[data.hostname]!.threads,
+            //   targetInfo.hostname,
+            // );
 
-            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
-              securityGrow;
+            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+            //   securityGrow;
             break;
           }
           case 'weaken':
-            log.info(
+            log.debug(
               'Completed weaken on node',
               ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['weakenAmount', data.weakenAmount],
             );
-            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
-              data.weakenAmount;
+            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
+            //   data.weakenAmount;
             break;
           case 'hack': {
-            log.info(
+            log.debug(
               'Completed hack on node',
               ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['hackAmount', data.hackAmount],
             );
-            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
-              data.hackAmount;
+            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
+            //   data.hackAmount;
 
-            const securityHackGrow = ns.hackAnalyzeSecurity(
-              deployInfo.hostToProcess[data.hostname]!.threads,
-              targetInfo.hostname,
-            );
+            // const securityHackGrow = ns.hackAnalyzeSecurity(
+            //   deployInfo.hostToProcess[data.hostname]!.threads,
+            //   targetInfo.hostname,
+            // );
 
-            runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
-              securityHackGrow;
+            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+            //   securityHackGrow;
             break;
           }
           default: {
@@ -206,7 +205,10 @@ export const main = typedMain(
             throw createNiceError('Unknown data type', ['data', neverData]);
           }
         }
-        if (!args?.managed) {
+
+        if (args?.managed) {
+          runningReport = networkReportStore.load();
+        } else {
           networkReportStore.write(runningReport);
           for (const host of Object.keys(runningReport.serverToServerInfo)) {
             ns.scp(NETWORK_REPORT_STORE.location.path, host);
@@ -216,8 +218,8 @@ export const main = typedMain(
         await ns.sleep(100);
       }
 
-      log.trace('Sleeping for 10 seconds');
-      await ns.sleep(10_000);
+      log.trace('Sleeping for 60 seconds');
+      await ns.sleep(60_000);
     }
   },
 );
