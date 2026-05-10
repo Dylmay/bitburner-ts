@@ -7,7 +7,6 @@ import { SWARM_COMMAND_CALLABLE } from 'bin/commands/swarm/models';
 import { DEPLOY_COMMAND_CALLABLE } from 'bin/commands/deploy/models';
 import { execCallable } from 'lib/callables/exec';
 import { Store } from 'lib/stores/store';
-import { ServerInfo } from 'lib/servers/models';
 import { createNiceError } from 'lib/utils/errors';
 import { spawnCallable } from 'lib/callables/spawn';
 
@@ -40,37 +39,35 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
     ['hosts', allRooted.map((s) => s.hostname)],
   );
 
-  const candidates = allRooted
-    .filter(({ hostname }) => hostname !== 'home')
-    .sort((a, b) => a.maxMoney - b.maxMoney);
+  const candidates = allRooted.filter(({ hostname }) => hostname !== 'home');
 
   log.info('Candidates (excl. home)', ['count', candidates.length]);
   for (const c of candidates) {
-    log.debug('Candidate', ['host', c.hostname], ['maxMoney', c.maxMoney], ['ram', c.ram]);
+    log.debug('Candidate', ['host', c.hostname], ['ram', c.ram]);
   }
 
   const reservedRam = new Map<string, number>();
-
-  const pickHost = (minRam: number): ServerInfo | undefined => {
-    const host = candidates.find(({ hostname, ram }) => {
-      const used = reservedRam.get(hostname) ?? 0;
-      return ram - used >= minRam;
-    });
-    if (host) {
-      reservedRam.set(host.hostname, (reservedRam.get(host.hostname) ?? 0) + minRam);
-    }
-    return host;
-  };
 
   for (const service of SERVICES) {
     const ram = filenameToInfo[service.callableDefinition.scriptPath.path]?.ramUsage;
     if (ram === undefined) {
       throw createNiceError('auto: RAM cost not found in install data', ['service', service.name]);
     }
-    const host = pickHost(ram);
+
+    const host = candidates
+      .map((server) => ({
+        server,
+        available: server.ram - (reservedRam.get(server.hostname) ?? 0),
+      }))
+      .filter(({ available }) => available >= ram)
+      .sort((a, b) => a.available - b.available)[0]?.server;
+
     if (!host) {
       throw createNiceError('auto: no suitable host', ['service', service.name]);
     }
+
+    reservedRam.set(host.hostname, (reservedRam.get(host.hostname) ?? 0) + ram);
+
     log.debug('Picked worker', ['service', service.name], ['host', host.hostname], ['ram', ram]);
 
     const hostname = host.hostname;

@@ -9,6 +9,8 @@ import { createNiceError } from 'lib/utils/errors';
 import { PortHandle } from 'lib/utils/ports';
 import { Store } from 'lib/stores/store';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
+import { Logger } from 'lib/utils/logging/logger';
+import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
@@ -111,29 +113,26 @@ export const main = typedMain(
     };
 
     log.info('Starting swarm');
-    let runningReport = networkReportStore.load();
-    let targetInfo = args?.target
-      ? runningReport.serverToServerInfo[args.target]!
-      : selectBestTarget(ns, runningReport);
-    let currentAction = computeAction(targetInfo);
-    let deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport);
+    let currentAction: ActionType | undefined = undefined;
+    let deployInfo: ReturnType<typeof deployAction> = { hostToProcess: {}, gigsSpent: 0, threadsSpent: 0 };
 
     while (true) {
-      const { hacking } = ns.getPlayer().skills;
+      const runningReport = networkReportStore.load();
+      const targetInfo = args?.target
+        ? runningReport.serverToServerInfo[args.target]!
+        : selectBestTarget(log, ns, runningReport);
       const newAction = computeAction(targetInfo);
 
       if (newAction !== currentAction) {
+        const { hacking } = ns.getPlayer().skills;
+        log.info('Found best target', ['targetInfo', targetInfo]);
         log.info(
           'Re-spinning after action change',
           ['hackingLevel', hacking],
           ['previousAction', currentAction],
           ['newAction', newAction],
         );
-        // report = files.loadJson(ns, NETWORK_REPORT_PATH, networkReportGuard);
-        targetInfo = args?.target
-          ? runningReport.serverToServerInfo[args.target]!
-          : selectBestTarget(ns, runningReport);
-        currentAction = computeAction(targetInfo);
+        currentAction = newAction;
 
         for (const pid of Object.values(deployInfo.hostToProcess).map(({ pid }) => pid)) {
           ns.kill(pid);
@@ -206,9 +205,7 @@ export const main = typedMain(
           }
         }
 
-        if (args?.managed) {
-          runningReport = networkReportStore.load();
-        } else {
+        if (!args?.managed) {
           networkReportStore.write(runningReport);
           for (const host of Object.keys(runningReport.serverToServerInfo)) {
             ns.scp(NETWORK_REPORT_STORE.location.path, host);
@@ -224,28 +221,18 @@ export const main = typedMain(
   },
 );
 
-const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
-  const playerLevel = ns.getPlayer().skills.hacking;
-
-  const getMaxMoneyPerTick = ({
-    minSecurityLevel,
-    baseSecurityLevel,
-    hostname,
-    maxMoney,
-  }: ServerInfo): number => {
-    const hackTime = ns.getHackTime(hostname);
-    const hackTimeAtMinSecurity = (hackTime / baseSecurityLevel) * minSecurityLevel;
-
-    return maxMoney / hackTimeAtMinSecurity;
-  };
+const selectBestTarget = (log: Logger, ns: NS, report: NetworkReport): ServerInfo => {
+  const playerHackingLevel = ns.getPlayer().skills.hacking;
 
   const sortedBestTargets = Object.values(report.serverToServerInfo)
     .filter(
       ({ maxMoney, requiredHackingLevel, unstable }) =>
-        maxMoney > 0 && requiredHackingLevel <= playerLevel && unstable.hasRootAccess,
+        maxMoney > 0 && requiredHackingLevel <= playerHackingLevel && unstable.hasRootAccess,
     )
-    .sort((a, b) => getMaxMoneyPerTick(a) - getMaxMoneyPerTick(b));
+    .sort((a, b) => getMaxMoneyPerTick(ns, a) - getMaxMoneyPerTick(ns, b))
+    .reverse();
   // get best potential hacking times
+  log.info('sortedBestTargets', ['sortedBestTargets', sortedBestTargets]);
 
   const best = sortedBestTargets.at(0);
   if (!best) {

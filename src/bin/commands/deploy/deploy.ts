@@ -31,6 +31,7 @@ export const main = typedMain(DEPLOY_COMMAND_CALLABLE, async ({ ns, log }, args)
 
     log.info('Deployed library across all hosts');
     if (!managedMode) {
+      ns.toast('Completed deployment');
       break;
     }
     await ns.sleep(60_000);

@@ -2,8 +2,8 @@ import { typedMain } from 'lib/callables/typedCallable';
 import { NETWORK_REPORT_STORE, ServerName } from 'lib/reports/models';
 import { createNiceError } from 'lib/utils/errors';
 import { STATS_CALLABLE } from 'bin/commands/stats/models';
-import { ServerInfo } from 'lib/servers/models';
 import { Store } from 'lib/stores/store';
+import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 
 type UnstableServerMetrics = {
   moneyAvailable: number;
@@ -85,12 +85,3 @@ export const main = typedMain(STATS_CALLABLE, async ({ ns }, args) => {
   ns.alert(`Reports ordered by ${orderBy}\n` + stringifiedReports);
 });
 
-const getMaxMoneyPerTick = (
-  ns: NS,
-  { minSecurityLevel, baseSecurityLevel, hostname, maxMoney }: ServerInfo,
-): number => {
-  const hackTime = ns.getHackTime(hostname);
-  const hackTimeAtMinSecurity = (hackTime / baseSecurityLevel) * minSecurityLevel;
-
-  return maxMoney / hackTimeAtMinSecurity;
-};

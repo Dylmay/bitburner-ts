@@ -10,5 +10,5 @@ export const scpFile = ({
   to: { path: Path; destinationHost: string };
 }) => {
   ns.scp(at.path.path, to.destinationHost, at.sourceHost);
-  ns.mv(at.path.path, to.destinationHost, to.destinationHost);
+  ns.mv(to.destinationHost, at.path.path, to.path.path);
 };
