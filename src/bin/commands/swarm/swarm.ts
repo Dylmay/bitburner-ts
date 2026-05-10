@@ -241,10 +241,19 @@ export const main = typedMain(
       const report = networkReportStore.load();
       const targets = selectTargets(ns, report);
 
-      if (hasDeploymentsChanged(targets, allDeployments)) {
-        log.info('Re-spinning after deployment change', ['hackingLevel', ns.getPlayer().skills.hacking]);
-        killAllDeployments(ns, allDeployments);
+      const stale = getStaleDeployments(targets, allDeployments);
+      if (allDeployments.length === 0) {
+        log.info('Starting initial deployment', ['hackingLevel', ns.getPlayer().skills.hacking]);
         allDeployments = buildDesiredDeployments(ns, log, localhost, scriptToRamCost, targets, report);
+      } else if (stale.length > 0) {
+        log.info('Re-spinning stale targets', ['count', stale.length], ['hackingLevel', ns.getPlayer().skills.hacking]);
+        killDeployments(ns, stale);
+        const staleHostnames = new Set(stale.map(d => d.target.hostname));
+        allDeployments = allDeployments.filter(d => !staleHostnames.has(d.target.hostname));
+        allDeployments.push(
+          ...buildDesiredDeployments(ns, log, localhost, scriptToRamCost,
+            targets.filter(t => staleHostnames.has(t.hostname)), report),
+        );
       } else {
         for (const { target, action, result } of allDeployments) {
           const freshInfo = report.serverToServerInfo[target.hostname];
