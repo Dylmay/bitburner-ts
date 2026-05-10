@@ -14,13 +14,11 @@ import { PortHandle } from 'lib/utils/ports';
 import { Store } from 'lib/stores/store';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
-import { getMoneyPerCycle } from 'lib/functions/getMoneyPerCycle';
 import { Logger } from 'lib/utils/logging/logger';
 import { RamReservation } from 'lib/servers/ramReservation';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
-const MIN_MONEY_PER_CYCLE = 1; // $/ms — servers below this are not worth thread allocation
 
 const ACTION_THREAD_CALCULATORS: Partial<Record<ActionType, ThreadRequirementCalculator>> = {
   grow: (ns, target) => {
@@ -57,15 +55,17 @@ type TargetDeployment = {
   result: DeploymentResult;
 };
 
+const computeThreads = (ns: NS, action: ActionType, target: ServerInfo): number =>
+  ACTION_THREAD_CALCULATORS[action]?.(ns, target) ?? 0;
+
 const resolveThreads = (ns: NS, log: Logger, action: ActionType, target: ServerInfo): number => {
-  const calculator = ACTION_THREAD_CALCULATORS[action];
-  if (calculator) {
-    const total = calculator(ns, target);
+  const total = computeThreads(ns, action, target);
+  if (ACTION_THREAD_CALCULATORS[action]) {
     log.info('Strategy: calculated budget', ['action', action], ['threads', total]);
-    return total;
+  } else {
+    log.warn('No thread calculator for action, defaulting to 0', ['action', action]);
   }
-  log.warn('No thread calculator for action, defaulting to 0', ['action', action]);
-  return 0;
+  return total;
 };
 
 const deployAction = (
@@ -197,9 +197,9 @@ const buildDesiredDeployments = (
   scriptToRamCost: Map<string, number | undefined>,
   targets: ServerInfo[],
   report: NetworkReport,
+  ramReservation: RamReservation,
 ): TargetDeployment[] => {
   const deployments: TargetDeployment[] = [];
-  const ramReservation = new RamReservation();
 
   for (const target of targets) {
     const action = computeAction(target);
@@ -247,16 +247,50 @@ export const main = typedMain(
       const stale = getStaleDeployments(targets, allDeployments);
       if (allDeployments.length === 0) {
         log.info('Starting initial deployment', ['hackingLevel', ns.getPlayer().skills.hacking]);
-        allDeployments = buildDesiredDeployments(ns, log, localhost, scriptToRamCost, targets, report);
+        allDeployments = buildDesiredDeployments(ns, log, localhost, scriptToRamCost, targets, report, new RamReservation());
       } else if (stale.length > 0) {
         log.info('Re-spinning stale targets', ['count', stale.length], ['hackingLevel', ns.getPlayer().skills.hacking]);
+
         killDeployments(ns, stale);
         const staleHostnames = new Set(stale.map(d => d.target.hostname));
-        allDeployments = allDeployments.filter(d => !staleHostnames.has(d.target.hostname));
-        allDeployments.push(
-          ...buildDesiredDeployments(ns, log, localhost, scriptToRamCost,
-            targets.filter(t => staleHostnames.has(t.hostname)), report),
+        const nonStaleDeployments = allDeployments.filter(d => !staleHostnames.has(d.target.hostname));
+        const nonStaleHostnames = new Set(nonStaleDeployments.map(d => d.target.hostname));
+        const targetByHostname = new Map(targets.map(t => [t.hostname, t]));
+        const ramReservation = new RamReservation();
+
+        // Re-deploy stale targets + any newly eligible targets not yet running, in priority order
+        const freshDeployments = buildDesiredDeployments(
+          ns, log, localhost, scriptToRamCost,
+          targets.filter(t => !nonStaleHostnames.has(t.hostname)),
+          report,
+          ramReservation,
         );
+
+        // Fill up non-stale targets using remaining freed RAM
+        const mergedNonStale = nonStaleDeployments.map(existing => {
+          const fresh = targetByHostname.get(existing.target.hostname);
+          if (!fresh) return existing;
+          const gap = computeThreads(ns, existing.action, fresh) - existing.result.threadsSpent;
+          if (gap <= 0) return existing;
+          const fillResult = deployAction(
+            ns, log, localhost, scriptToRamCost,
+            existing.action, fresh.hostname, report,
+            { kind: 'budget', total: gap },
+            ramReservation,
+          );
+          if (fillResult.threadsSpent === 0) return existing;
+          log.info('Fill-up threads added', ['target', fresh.hostname], ['threads', fillResult.threadsSpent]);
+          return {
+            ...existing,
+            result: {
+              hostToProcess: { ...existing.result.hostToProcess, ...fillResult.hostToProcess },
+              threadsSpent: existing.result.threadsSpent + fillResult.threadsSpent,
+              gigsSpent: existing.result.gigsSpent + fillResult.gigsSpent,
+            },
+          };
+        });
+
+        allDeployments = [...mergedNonStale, ...freshDeployments];
       } else {
         for (const { target, action, result } of allDeployments) {
           const freshInfo = report.serverToServerInfo[target.hostname];
@@ -340,7 +374,6 @@ const selectTargets = (ns: NS, report: NetworkReport): ServerInfo[] => {
       ({ maxMoney, requiredHackingLevel, unstable }) =>
         maxMoney > 0 && requiredHackingLevel <= playerHackingLevel && unstable.hasRootAccess,
     )
-    .filter((server) => getMoneyPerCycle(ns, server) >= MIN_MONEY_PER_CYCLE)
     .sort((a, b) => getMaxMoneyPerTick(ns, a) - getMaxMoneyPerTick(ns, b))
     .reverse();
 
