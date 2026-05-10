@@ -7,9 +7,7 @@ import { ServerInfo } from 'lib/servers/models';
 
 export type SwarmCommand = { command: 'swarm' };
 
-export type ThreadAllocationStrategy =
-  | { kind: 'fill' }
-  | { kind: 'budget'; total: number };
+export type ThreadAllocationStrategy = { kind: 'budget'; total: number };
 
 export type ThreadRequirementCalculator = (ns: NS, target: ServerInfo) => number;
 

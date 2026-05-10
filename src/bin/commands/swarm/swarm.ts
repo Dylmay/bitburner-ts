@@ -14,9 +14,11 @@ import { PortHandle } from 'lib/utils/ports';
 import { Store } from 'lib/stores/store';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
+import { getMoneyPerCycle } from 'lib/functions/getMoneyPerCycle';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
+const MIN_MONEY_PER_CYCLE = 1; // $/ms — servers below this are not worth thread allocation
 
 const ACTION_THREAD_CALCULATORS: Partial<Record<ActionType, ThreadRequirementCalculator>> = {
   grow: (ns, target) => {
@@ -72,7 +74,7 @@ export const main = typedMain(
       action: ActionType,
       targetHost: string,
       report: NetworkReport,
-      strategy: ThreadAllocationStrategy = { kind: 'fill' },
+      strategy: ThreadAllocationStrategy,
     ): {
       hostToProcess: Record<string, { pid: number; threads: number }>;
       gigsSpent: number;
@@ -103,39 +105,42 @@ export const main = typedMain(
       const hostToProcess: Record<string, { pid: number; threads: number }> = {};
       let gigsSpent = 0;
       let threadsSpent = 0;
-      let remaining = strategy.kind === 'budget' ? strategy.total : Infinity;
+      let remaining = strategy.total;
 
-      for (const [hostname, serverInfo] of Object.entries(report.serverToServerInfo)) {
-        log.trace('Checking host', ['hostname', hostname], ['serverInfo', serverInfo]);
-        if (hostname === 'home' || hostname === localhost) {
-          continue;
-        }
-        if (!serverInfo.unstable.hasRootAccess) {
-          log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
-          continue;
-        }
+      const totalRamNeeded = strategy.total * scriptRam;
+      const eligibleServers = Object.entries(report.serverToServerInfo)
+        .filter(([hostname, serverInfo]) => {
+          if (hostname === 'home' || hostname === localhost) return false;
+          if (!serverInfo.unstable.hasRootAccess) {
+            log.debug('Do not have root access on this node. Skipping', ['hostname', hostname]);
+            return false;
+          }
+          const foreignProcess = ns.ps(hostname).find(({ filename }) => !ownedScriptPaths.has(filename));
+          if (foreignProcess) {
+            log.debug('Skipping node — foreign process running', ['hostname', hostname], ['process', foreignProcess.filename]);
+            return false;
+          }
+          return true;
+        })
+        .map(([hostname, serverInfo]) => ({ hostname, availableRam: serverInfo.ram - ns.getServerUsedRam(hostname) }))
+        .filter(({ availableRam }) => availableRam >= scriptRam)
+        .sort((a, b) => {
+          const aFits = a.availableRam >= totalRamNeeded;
+          const bFits = b.availableRam >= totalRamNeeded;
+          if (aFits && bFits) return a.availableRam - b.availableRam; // best fit: smallest that holds all
+          if (aFits !== bFits) return aFits ? -1 : 1;                 // servers that fit come first
+          return b.availableRam - a.availableRam;                     // FFD for overflow remainder
+        });
 
-        const foreignProcess = ns.ps(hostname).find(({ filename }) => !ownedScriptPaths.has(filename));
-        if (foreignProcess) {
-          log.debug('Skipping node — foreign process running', ['hostname', hostname], ['process', foreignProcess.filename]);
-          continue;
-        }
+      for (const { hostname, availableRam } of eligibleServers) {
+        if (remaining <= 0) break;
 
-        if (remaining <= 0) {
-          break;
-        }
-
-        const availableRam = serverInfo.ram - ns.getServerUsedRam(hostname);
         const maxThreads = Math.floor(availableRam / scriptRam);
-        const threads = strategy.kind === 'budget' ? Math.min(maxThreads, remaining) : maxThreads;
+        const threads = Math.min(maxThreads, remaining);
 
         remaining -= threads;
         threadsSpent += threads;
         gigsSpent += scriptRam * threads;
-
-        if (threads <= 0) {
-          continue;
-        }
 
         const pid = execCallable({
           ns,
@@ -221,8 +226,8 @@ export const main = typedMain(
           if (total === 0) continue;
           const strategy: ThreadAllocationStrategy = { kind: 'budget', total };
           const info = deployAction(currentAction, target.hostname, runningReport, strategy);
-          allDeployInfos.push({ target, info });
           if (info.threadsSpent === 0) break;
+          allDeployInfos.push({ target, info });
         }
       } else {
         for (const { target, info } of allDeployInfos) {
@@ -328,6 +333,7 @@ const selectTargets = (ns: NS, report: NetworkReport): ServerInfo[] => {
       ({ maxMoney, requiredHackingLevel, unstable }) =>
         maxMoney > 0 && requiredHackingLevel <= playerHackingLevel && unstable.hasRootAccess,
     )
+    .filter((server) => getMoneyPerCycle(ns, server) >= MIN_MONEY_PER_CYCLE)
     .sort((a, b) => getMaxMoneyPerTick(ns, a) - getMaxMoneyPerTick(ns, b))
     .reverse();
 
