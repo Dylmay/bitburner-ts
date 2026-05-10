@@ -1,7 +1,10 @@
 import { typedMain } from 'lib/callables/typedCallable';
 import { NETWORK_REPORT_STORE } from 'lib/reports/models';
 import { Store } from 'lib/stores/store';
-import { buildServerInfoLocally } from 'lib/servers/buildServerInfoLocal';
+import {
+  buildServerInfoLocally,
+  buildUnstableServerInfoLocally,
+} from 'lib/servers/buildServerInfoLocal';
 import { runCallableAndWait } from 'lib/callables/runAndWait';
 import { createNiceError } from 'lib/utils/errors';
 import { SNIFF_COMMAND_CALLABLE } from 'bin/commands/sniff/models';
@@ -9,6 +12,8 @@ import { INFIL_HOST_CALLABLE } from 'lib/scripts/models';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { SERVER_INFO_STORE } from 'lib/servers/models';
 import { scpFile } from 'lib/utils/files/scpFile';
+import { BuilderArgs } from 'lib/servers/steps/models';
+import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 
 export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
   const store = Store.openStore(ns, NETWORK_REPORT_STORE);
@@ -21,24 +26,39 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
       .keys()
       .toArray();
 
-    log.info('sniffing servers', ['count', toSniff.length]);
+    log.debug('sniffing servers', ['count', toSniff.length]);
 
     for (const hostname of toSniff) {
-      log.debug('building server info', ['hostname', hostname]);
-      const [serverInfo, serverInfoPath] = await buildServerInfoLocally(
-        ns,
-        hostname,
-        async (step, args) => {
-          const pid = await runCallableAndWait({ ns, callableDefinition: step, args });
-          if (!pid) {
-            throw createNiceError(
-              'sniff: build step failed',
-              ['hostname', hostname],
-              ['step', step],
-            );
-          }
-        },
-      );
+      const executor = async (step: TypedCallableDefinition<BuilderArgs>, args: BuilderArgs) => {
+        const pid = await runCallableAndWait({
+          ns,
+          callableDefinition: step,
+          args,
+          sleepAmountMs: 5,
+        });
+        if (!pid) {
+          throw createNiceError('sniff: build step failed', ['hostname', hostname], ['step', step]);
+        }
+      };
+
+      const existingServerInfo = report.serverToServerInfo[hostname];
+      let serverInfo;
+      let serverInfoPath;
+
+      if (existingServerInfo) {
+        log.debug('refreshing unstable server info', ['hostname', hostname]);
+        const [unstable, tempPath] = await buildUnstableServerInfoLocally(
+          ns,
+          existingServerInfo,
+          executor,
+        );
+        serverInfo = { ...existingServerInfo, unstable };
+        serverInfoPath = tempPath;
+      } else {
+        log.debug('building server info', ['hostname', hostname]);
+        [serverInfo, serverInfoPath] = await buildServerInfoLocally(ns, hostname, executor);
+      }
+
       const curHackLevel = ns.getPlayer().skills.hacking;
 
       report.serverToServerInfo[hostname] = serverInfo;
@@ -70,7 +90,8 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
       if (!report.allServers.includes(hostname)) {
         report.allServers.push(hostname);
       }
-      log.info(
+
+      log.debug(
         'configured server',
         ['hostname', serverInfo.hostname],
         ['hasRootAccess', serverInfo.unstable.hasRootAccess],
@@ -89,7 +110,7 @@ export const main = typedMain(SNIFF_COMMAND_CALLABLE, async ({ ns, log }) => {
       ns.scp(NETWORK_REPORT_STORE.location.path, host);
     }
 
-    ns.toast('finished sniffing network');
-    await ns.sleep(10_000);
+    // ns.toast('finished sniffing network');
+    await ns.sleep(0);
   }
 });

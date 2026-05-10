@@ -9,7 +9,6 @@ import { createNiceError } from 'lib/utils/errors';
 import { PortHandle } from 'lib/utils/ports';
 import { Store } from 'lib/stores/store';
 import { INSTALL_DATA_STORE } from 'lib/installs/models';
-import { Logger } from 'lib/utils/logging/logger';
 import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
@@ -114,18 +113,22 @@ export const main = typedMain(
 
     log.info('Starting swarm');
     let currentAction: ActionType | undefined = undefined;
-    let deployInfo: ReturnType<typeof deployAction> = { hostToProcess: {}, gigsSpent: 0, threadsSpent: 0 };
+    let deployInfo: ReturnType<typeof deployAction> = {
+      hostToProcess: {},
+      gigsSpent: 0,
+      threadsSpent: 0,
+    };
 
     while (true) {
       const runningReport = networkReportStore.load();
       const targetInfo = args?.target
         ? runningReport.serverToServerInfo[args.target]!
-        : selectBestTarget(log, ns, runningReport);
+        : selectBestTarget(ns, runningReport);
       const newAction = computeAction(targetInfo);
 
       if (newAction !== currentAction) {
         const { hacking } = ns.getPlayer().skills;
-        log.info('Found best target', ['targetInfo', targetInfo]);
+        log.debug('Found best target', ['targetInfo', targetInfo]);
         log.info(
           'Re-spinning after action change',
           ['hackingLevel', hacking],
@@ -139,6 +142,15 @@ export const main = typedMain(
         }
 
         deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport);
+      } else {
+        log.info(
+          'Action unchanged',
+          ['action', currentAction],
+          ['securityLevel', targetInfo.unstable.securityLevel],
+          ['minSecurityLevel', targetInfo.minSecurityLevel],
+          ['moneyAvailable', targetInfo.unstable.moneyAvailable],
+          ['maxMoney', targetInfo.maxMoney],
+        );
       }
 
       while (hackListenerPort.hasData()) {
@@ -216,12 +228,12 @@ export const main = typedMain(
       }
 
       log.trace('Sleeping for 60 seconds');
-      await ns.sleep(60_000);
+      await ns.sleep(15_000);
     }
   },
 );
 
-const selectBestTarget = (log: Logger, ns: NS, report: NetworkReport): ServerInfo => {
+const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
   const playerHackingLevel = ns.getPlayer().skills.hacking;
 
   const sortedBestTargets = Object.values(report.serverToServerInfo)
@@ -231,9 +243,6 @@ const selectBestTarget = (log: Logger, ns: NS, report: NetworkReport): ServerInf
     )
     .sort((a, b) => getMaxMoneyPerTick(ns, a) - getMaxMoneyPerTick(ns, b))
     .reverse();
-  // get best potential hacking times
-  log.info('sortedBestTargets', ['sortedBestTargets', sortedBestTargets]);
-
   const best = sortedBestTargets.at(0);
   if (!best) {
     throw createNiceError('swarm: no hackable server found in network report');

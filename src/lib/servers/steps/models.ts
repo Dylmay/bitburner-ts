@@ -61,6 +61,13 @@ export const ASSEMBLE_CALLABLE: TypedCallableDefinition<BuilderArgs> = {
   scriptPath: pathOf('lib/servers/steps/assemble.ts'),
 };
 
+export const BUILD_UNSTABLE_STEPS: TypedCallableDefinition<BuilderArgs>[] = [
+  SET_FILES_CALLABLE,
+  SET_MONEY_AVAILABLE_CALLABLE,
+  SET_SECURITY_LEVEL_CALLABLE,
+  HAS_ROOT_ACCESS_CALLABLE,
+];
+
 export const BUILD_SERVER_INFO_STEPS: TypedCallableDefinition<BuilderArgs>[] = [
   SET_HOSTNAME_CALLABLE,
   SET_IP_CALLABLE,
