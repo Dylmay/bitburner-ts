@@ -16,6 +16,7 @@ import { INSTALL_DATA_STORE } from 'lib/installs/models';
 import { getMaxMoneyPerTick } from 'lib/functions/getMaxMoneyPerTick';
 import { getMoneyPerCycle } from 'lib/functions/getMoneyPerCycle';
 import { Logger } from 'lib/utils/logging/logger';
+import { RamReservation } from 'lib/servers/ramReservation';
 
 const MIN_MONEY_PERCENTAGE = 0.8;
 const MIN_SECURITY_PERCENTAGE = 0.8;
@@ -76,6 +77,7 @@ const deployAction = (
   targetHost: string,
   report: NetworkReport,
   strategy: ThreadAllocationStrategy,
+  ramReservation: RamReservation,
 ): DeploymentResult => {
   const callable = ACTION_TYPE_TO_CALLABLE[action];
 
@@ -119,7 +121,7 @@ const deployAction = (
       }
       return true;
     })
-    .map(([hostname, serverInfo]) => ({ hostname, availableRam: serverInfo.ram - ns.getServerUsedRam(hostname) }))
+    .map(([hostname, serverInfo]) => ({ hostname, availableRam: serverInfo.ram - ns.getServerUsedRam(hostname) - ramReservation.reservedFor(hostname) }))
     .filter(({ availableRam }) => availableRam >= scriptRam)
     .sort((a, b) => {
       const aFits = a.availableRam >= totalRamNeeded;
@@ -135,10 +137,6 @@ const deployAction = (
     const maxThreads = Math.floor(availableRam / scriptRam);
     const threads = Math.min(maxThreads, remaining);
 
-    remaining -= threads;
-    threadsSpent += threads;
-    gigsSpent += scriptRam * threads;
-
     const pid = execCallable({
       ns,
       hostname,
@@ -148,6 +146,10 @@ const deployAction = (
     });
 
     if (pid !== undefined) {
+      remaining -= threads;
+      threadsSpent += threads;
+      gigsSpent += scriptRam * threads;
+      ramReservation.reserve(hostname, scriptRam * threads);
       hostToProcess[hostname] = { pid, threads };
       log.debug(
         'Assigned threads to host',
@@ -197,6 +199,7 @@ const buildDesiredDeployments = (
   report: NetworkReport,
 ): TargetDeployment[] => {
   const deployments: TargetDeployment[] = [];
+  const ramReservation = new RamReservation();
 
   for (const target of targets) {
     const action = computeAction(target);
@@ -204,7 +207,7 @@ const buildDesiredDeployments = (
     if (total === 0) continue;
 
     const strategy: ThreadAllocationStrategy = { kind: 'budget', total };
-    const result = deployAction(ns, log, localhost, scriptToRamCost, action, target.hostname, report, strategy);
+    const result = deployAction(ns, log, localhost, scriptToRamCost, action, target.hostname, report, strategy, ramReservation);
     if (result.threadsSpent === 0) break;
 
     deployments.push({ target, action, result });

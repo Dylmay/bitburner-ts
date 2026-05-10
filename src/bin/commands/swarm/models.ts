@@ -1,7 +1,6 @@
 import { TypedCallableDefinition } from 'lib/callables/typedCallable';
 import { CommandFor } from 'bin/commands/models';
 import { pathOf } from 'lib/utils/files/paths';
-import { ActionType } from 'lib/scripts/models';
 import { ServerInfo } from 'lib/servers/models';
 
 export type SwarmCommand = { command: 'swarm' };

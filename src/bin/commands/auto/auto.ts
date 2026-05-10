@@ -9,6 +9,7 @@ import { execCallable } from 'lib/callables/exec';
 import { Store } from 'lib/stores/store';
 import { createNiceError } from 'lib/utils/errors';
 import { spawnCallable } from 'lib/callables/spawn';
+import { RamReservation } from 'lib/servers/ramReservation';
 
 type ServiceDef = {
   name: string;
@@ -47,7 +48,7 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
     log.debug('Candidate', ['host', c.hostname], ['ram', c.ram]);
   }
 
-  const reservedRam = new Map<string, number>();
+  const ramReservation = new RamReservation();
 
   for (const service of SERVICES) {
     const ram = filenameToInfo[service.callableDefinition.scriptPath.path]?.ramUsage;
@@ -60,7 +61,7 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
     const host = candidates
       .map((server) => ({
         server,
-        available: server.ram - (reservedRam.get(server.hostname) ?? 0),
+        available: server.ram - ramReservation.reservedFor(server.hostname),
       }))
       .filter(({ available }) => available >= ramWithBuffer)
       .sort((a, b) => a.available - b.available)[0]?.server;
@@ -69,7 +70,7 @@ export const main = typedMain(AUTO_COMMAND_CALLABLE, async ({ ns, log }) => {
       throw createNiceError('auto: no suitable host', ['service', service.name]);
     }
 
-    reservedRam.set(host.hostname, (reservedRam.get(host.hostname) ?? 0) + ram);
+    ramReservation.reserve(host.hostname, ram);
 
     log.debug('Picked worker', ['service', service.name], ['host', host.hostname], ['ram', ram]);
 
