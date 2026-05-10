@@ -1,5 +1,5 @@
 import { typedMain } from 'lib/callables/typedCallable';
-import { SWARM_COMMAND_CALLABLE } from 'bin/commands/swarm/models';
+import { SWARM_COMMAND_CALLABLE, ThreadAllocationStrategy } from 'bin/commands/swarm/models';
 import { ActionType, ACTION_TYPE_TO_CALLABLE } from 'lib/scripts/models';
 import { execCallable } from 'lib/callables/exec';
 import { HACK_OUTPUT_PORT, HackArgs } from 'lib/hacks/models';
@@ -45,6 +45,7 @@ export const main = typedMain(
       action: ActionType,
       targetHost: string,
       report: NetworkReport,
+      strategy: ThreadAllocationStrategy = { kind: 'fill' },
     ): {
       hostToProcess: Record<string, { pid: number; threads: number }>;
       gigsSpent: number;
@@ -61,11 +62,13 @@ export const main = typedMain(
 
       const args: HackArgs = { target: targetHost };
 
-      log.info('Deploying action', ['action', action], ['target', targetHost]);
+      log.info('Deploying action', ['action', action], ['target', targetHost], ['strategy', strategy]);
 
       const hostToProcess: Record<string, { pid: number; threads: number }> = {};
       let gigsSpent = 0;
       let threadsSpent = 0;
+      let remaining = strategy.kind === 'budget' ? strategy.total : Infinity;
+
       for (const [hostname, serverInfo] of Object.entries(report.serverToServerInfo)) {
         log.trace('Checking host', ['hostname', hostname], ['serverInfo', serverInfo]);
         if (hostname === 'home' || hostname === localhost) {
@@ -76,9 +79,15 @@ export const main = typedMain(
           continue;
         }
 
-        // ram should never be undefined but a failure was spotted...
-        const threads = Math.floor(serverInfo.ram / scriptRam) ?? 0;
+        if (remaining <= 0) {
+          break;
+        }
 
+        // ram should never be undefined but a failure was spotted...
+        const maxThreads = Math.floor(serverInfo.ram / scriptRam) ?? 0;
+        const threads = strategy.kind === 'budget' ? Math.min(maxThreads, remaining) : maxThreads;
+
+        remaining -= threads;
         threadsSpent += threads;
         gigsSpent += scriptRam * threads;
 
@@ -112,6 +121,10 @@ export const main = typedMain(
     };
 
     log.info('Starting swarm');
+    const strategy: ThreadAllocationStrategy = args?.threads
+      ? { kind: 'budget', total: args.threads }
+      : { kind: 'fill' };
+
     let currentAction: ActionType | undefined = undefined;
     let deployInfo: ReturnType<typeof deployAction> = {
       hostToProcess: {},
@@ -124,7 +137,7 @@ export const main = typedMain(
       const targetInfo = args?.target
         ? runningReport.serverToServerInfo[args.target]!
         : selectBestTarget(ns, runningReport);
-      const newAction = computeAction(targetInfo);
+      const newAction = args?.action ?? computeAction(targetInfo);
 
       if (newAction !== currentAction) {
         const { hacking } = ns.getPlayer().skills;
@@ -141,7 +154,7 @@ export const main = typedMain(
           ns.kill(pid);
         }
 
-        deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport);
+        deployInfo = deployAction(currentAction, targetInfo.hostname, runningReport, strategy);
       } else {
         log.info(
           'Action unchanged',
