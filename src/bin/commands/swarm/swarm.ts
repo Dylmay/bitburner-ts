@@ -165,38 +165,32 @@ export const main = typedMain(
 
     log.info('Starting swarm');
 
-    const resolveStrategy = (action: ActionType, target: ServerInfo): ThreadAllocationStrategy => {
+    const resolveThreads = (action: ActionType, target: ServerInfo): number => {
       if (args?.threads !== undefined) {
         log.info('Strategy: manual override', ['action', action], ['threads', args.threads]);
-        return { kind: 'budget', total: args.threads };
+        return args.threads;
       }
       const calculator = ACTION_THREAD_CALCULATORS[action];
       if (calculator) {
         const total = calculator(ns, target);
         log.info('Strategy: calculated budget', ['action', action], ['threads', total]);
-        return { kind: 'budget', total };
+        return total;
       }
-      log.info('Strategy: fill all RAM', ['action', action]);
-      return { kind: 'fill' };
+      log.warn('No thread calculator for action, defaulting to 0', ['action', action]);
+      return 0;
     };
 
     let currentAction: ActionType | undefined = undefined;
-    let deployInfo: ReturnType<typeof deployAction> = {
-      hostToProcess: {},
-      gigsSpent: 0,
-      threadsSpent: 0,
-    };
+    let allDeployInfos: { target: ServerInfo; info: ReturnType<typeof deployAction> }[] = [];
 
     while (true) {
       const runningReport = networkReportStore.load();
-      const targetInfo = args?.target
-        ? runningReport.serverToServerInfo[args.target]!
-        : selectBestTarget(ns, runningReport);
-      const newAction = args?.action ?? computeAction(targetInfo);
+      const targets = selectTargets(ns, runningReport);
+      const primaryTarget = targets[0]!;
+      const newAction = args?.action ?? computeAction(primaryTarget);
 
       if (newAction !== currentAction) {
         const { hacking } = ns.getPlayer().skills;
-        log.debug('Found best target', ['targetInfo', targetInfo]);
         log.info(
           'Re-spinning after action change',
           ['hackingLevel', hacking],
@@ -205,25 +199,35 @@ export const main = typedMain(
         );
         currentAction = newAction;
 
-        for (const pid of Object.values(deployInfo.hostToProcess).map(({ pid }) => pid)) {
-          ns.kill(pid);
+        for (const { info } of allDeployInfos) {
+          for (const { pid } of Object.values(info.hostToProcess)) {
+            ns.kill(pid);
+          }
         }
 
-        deployInfo = deployAction(
-          currentAction,
-          targetInfo.hostname,
-          runningReport,
-          resolveStrategy(currentAction, targetInfo),
-        );
+        allDeployInfos = [];
+        for (const target of targets) {
+          const total = resolveThreads(currentAction, target);
+          if (total === 0) continue;
+          const strategy: ThreadAllocationStrategy = { kind: 'budget', total };
+          const info = deployAction(currentAction, target.hostname, runningReport, strategy);
+          allDeployInfos.push({ target, info });
+          if (info.threadsSpent === 0) break;
+        }
       } else {
-        log.info(
-          'Action unchanged',
-          ['action', currentAction],
-          ['securityLevel', targetInfo.unstable.securityLevel],
-          ['minSecurityLevel', targetInfo.minSecurityLevel],
-          ['moneyAvailable', targetInfo.unstable.moneyAvailable],
-          ['maxMoney', targetInfo.maxMoney],
-        );
+        for (const { target, info } of allDeployInfos) {
+          log.info(
+            'Action unchanged',
+            ['action', currentAction],
+            ['target', target.hostname],
+            ['threadsAssigned', info.threadsSpent],
+            ['hosts', Object.keys(info.hostToProcess).length],
+            ['securityLevel', target.unstable.securityLevel],
+            ['minSecurityLevel', target.minSecurityLevel],
+            ['moneyAvailable', target.unstable.moneyAvailable],
+            ['maxMoney', target.maxMoney],
+          );
+        }
       }
 
       while (hackListenerPort.hasData()) {
@@ -239,48 +243,45 @@ export const main = typedMain(
           case 'grow': {
             log.debug(
               'Completed grow on node',
-              ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['growAmount', data.growAmount],
             );
-            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable *=
+            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.moneyAvailable *=
             //   data.growAmount;
 
             // const securityGrow = ns.growthAnalyzeSecurity(
             //   deployInfo.hostToProcess[data.hostname]!.threads,
-            //   targetInfo.hostname,
+            //   primaryTarget.hostname,
             // );
 
-            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel +=
             //   securityGrow;
             break;
           }
           case 'weaken':
             log.debug(
               'Completed weaken on node',
-              ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['weakenAmount', data.weakenAmount],
             );
-            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel -=
+            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel -=
             //   data.weakenAmount;
             break;
           case 'hack': {
             log.debug(
               'Completed hack on node',
-              ['target', targetInfo.hostname],
               ['host', data.hostname],
               ['hackAmount', data.hackAmount],
             );
-            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.moneyAvailable -=
+            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.moneyAvailable -=
             //   data.hackAmount;
 
             // const securityHackGrow = ns.hackAnalyzeSecurity(
             //   deployInfo.hostToProcess[data.hostname]!.threads,
-            //   targetInfo.hostname,
+            //   primaryTarget.hostname,
             // );
 
-            // runningReport.serverToServerInfo[targetInfo.hostname]!.unstable.securityLevel +=
+            // runningReport.serverToServerInfo[primaryTarget.hostname]!.unstable.securityLevel +=
             //   securityHackGrow;
             break;
           }
@@ -306,22 +307,22 @@ export const main = typedMain(
   },
 );
 
-const selectBestTarget = (ns: NS, report: NetworkReport): ServerInfo => {
+const selectTargets = (ns: NS, report: NetworkReport): ServerInfo[] => {
   const playerHackingLevel = ns.getPlayer().skills.hacking;
 
-  const sortedBestTargets = Object.values(report.serverToServerInfo)
+  const sorted = Object.values(report.serverToServerInfo)
     .filter(
       ({ maxMoney, requiredHackingLevel, unstable }) =>
         maxMoney > 0 && requiredHackingLevel <= playerHackingLevel && unstable.hasRootAccess,
     )
     .sort((a, b) => getMaxMoneyPerTick(ns, a) - getMaxMoneyPerTick(ns, b))
     .reverse();
-  const best = sortedBestTargets.at(0);
-  if (!best) {
+
+  if (sorted.length === 0) {
     throw createNiceError('swarm: no hackable server found in network report');
   }
 
-  return best;
+  return sorted;
 };
 
 const computeAction = (info: ServerInfo): ActionType => {
